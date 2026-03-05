@@ -2,23 +2,16 @@ import { createContext, ReactNode, useEffect, useRef, useState, useCallback } fr
 import { Toast } from "@/src/components/toast";
 import { AppStorage } from "@/src/hooks/useAppStorage";
 import { Platform } from "react-native";
-// import Config from 'react-native-config';
+import { API_BASE_URL } from "@/src/config";
 
 export const AppContext = createContext<any>(null);
-
-// const EXPO_PUBLIC_API_URL="http://192.168.2.208:8000/"
-const EXPO_PUBLIC_API_URL="https://smart-doorlock-server-851342133148.europe-west1.run.app/"
-
-// const EXPO_PUBLIC_API_URL=""
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<any | null>(null);
     const [authToken, setAuthToken] = useState<string | null>(null);
     const [deviceId, setDeviceId] = useState<string | null>(null);
-    // const base_url = process.env.EXPO_PUBLIC_API_URL + '/';
-    // let EXPO_PUBLIC_API_URL="http://172.30.20.117:8000/"
 
-    const base_url = EXPO_PUBLIC_API_URL;
+    const base_url = API_BASE_URL;
     const [isLocked, setIsLocked] = useState(false);
     const [toastVisible, setToastVisible] = useState(false);
     const [isDeviceConnected, setIsDeviceConnected] = useState(false);
@@ -32,13 +25,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         variant: "default",
     });
 
-    const cameraBaseUrl = "http://192.168.2.209:81";
     const isWebBrowser = Platform.OS === "web";
 
     const wsRef = useRef<WebSocket | null>(null);
     const previousLockState = useRef<boolean | null>(null);
 
-    // NEW: reconnection state
     const reconnectAttemptsRef = useRef(0);
     const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -106,23 +97,24 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         previousLockState.current = lockedNow;
     }, [isLocked]);
 
-    // Restore session once on app start
+    // Restore session once on app start (async-safe)
     useEffect(() => {
-        const storedSession = AppStorage.getSession();
-        if (storedSession?.user) {
-            setUser(storedSession.user);
-        }
-        const storedToken =
-            storedSession?.token || storedSession?.accessToken || storedSession?.access_token;
-        if (storedToken) {
-            setAuthToken(storedToken);
-        }
+        AppStorage.getSession().then((storedSession) => {
+            if (storedSession?.user) {
+                setUser(storedSession.user);
+            }
+            const storedToken =
+                storedSession?.token || storedSession?.accessToken || storedSession?.access_token;
+            if (storedToken) {
+                setAuthToken(storedToken);
+            }
 
-        const fallbackDeviceId =
-            storedSession?.user?.deviceId ||
-            storedSession?.user?.device_id ||
-            "smartlock_5C567740C86C";
-        setDeviceId(fallbackDeviceId);
+            const fallbackDeviceId =
+                storedSession?.user?.deviceId ||
+                storedSession?.user?.device_id ||
+                "smartlock_5C567740C86C";
+            setDeviceId(fallbackDeviceId);
+        });
     }, []);
 
     // ========== WebSocket connection + async reconnection ==========
@@ -132,13 +124,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             return;
         }
 
-        // If there is already an open or connecting socket, don't recreate
         if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
             console.log("WS: already connected/connecting, skipping new connection");
             return;
         }
 
-        // Clear any scheduled reconnection attempt when we actively connect
         clearReconnectTimeout();
 
         const wsUrl =
@@ -153,7 +143,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         ws.onopen = () => {
             console.log("Client WS connected");
             setIsDeviceConnected(true);
-            reconnectAttemptsRef.current = 0; // reset backoff
+            reconnectAttemptsRef.current = 0;
 
             const subMsg = JSON.stringify({
                 type: "subscribe",
@@ -183,14 +173,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             wsRef.current = null;
 
             const attempt = reconnectAttemptsRef.current;
-            const delay = Math.min(30000, 1000 * Math.pow(2, attempt)); // 1s, 2s, 4s, ... max 30s
+            const delay = Math.min(30000, 1000 * Math.pow(2, attempt));
             reconnectAttemptsRef.current = attempt + 1;
 
             console.log(`WS: scheduling reconnect in ${delay}ms (attempt ${attempt + 1})`);
 
             clearReconnectTimeout();
             reconnectTimeoutRef.current = setTimeout(() => {
-                // Only try if still no socket and we still have a deviceId
                 if (!wsRef.current && deviceId) {
                     connectWebSocket();
                 }
@@ -199,7 +188,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         ws.onerror = (event) => {
             console.log("WS error:", event);
-            // In RN, onerror is followed by onclose, but we can be defensive:
             scheduleReconnect();
         };
 
@@ -212,7 +200,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     // Create/cleanup WS when deviceId changes
     useEffect(() => {
         if (!deviceId) {
-            // No device => ensure socket & timers are cleared
             if (wsRef.current) {
                 wsRef.current.close();
                 wsRef.current = null;
@@ -235,8 +222,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         };
     }, [deviceId, connectWebSocket]);
 
-    const signout = () => {
-        AppStorage.clearSession();
+    const signout = async () => {
+        await AppStorage.clearSession();
         setUser(null);
         setAuthToken(null);
         setDeviceId(null);
@@ -249,27 +236,27 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setIsDeviceConnected(false);
     };
 
-    // signin / signup code unchanged ...
-
     const signin = async (email: string, password: string) => {
-        if(email=== "test" && password === "test"){
-            const data = {user:{
-                "id": 1,
-                "email": "",
-                "firstName": "test",
-                "lastName": "test",
-                "device_id": "smartlock_5C567740C86C",
-            },
-            token: "1"}
+        if (email === "test" && password === "test") {
+            const data = {
+                user: {
+                    id: 1,
+                    email: "",
+                    firstName: "test",
+                    lastName: "test",
+                    device_id: "smartlock_5C567740C86C",
+                },
+                token: "1",
+            };
 
             setUser(data.user);
             setAuthToken(data.token);
-            AppStorage.setSession({ user: data.user, token: data.token });
+            await AppStorage.setSession({ user: data.user, token: data.token });
 
             if (data.user?.device_id) {
                 setDeviceId(data.user.device_id);
             }
-            return
+            return;
         }
         const response = await fetch(`${base_url}auth/login`, {
             method: "POST",
@@ -295,7 +282,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             console.log("Got access token:", accessToken);
             setAuthToken(accessToken);
         }
-        AppStorage.setSession({ user: data.user, token: accessToken, refreshToken });
+        await AppStorage.setSession({ user: data.user, token: accessToken, refreshToken });
 
         const nextDeviceId = data.user?.deviceId ?? data.user?.device_id;
         if (nextDeviceId) {
@@ -331,7 +318,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (accessToken) {
             setAuthToken(accessToken);
         }
-        AppStorage.setSession({ user: data.user, token: accessToken, refreshToken });
+        await AppStorage.setSession({ user: data.user, token: accessToken, refreshToken });
 
         const nextDeviceId = data.user?.deviceId ?? data.user?.device_id;
         if (nextDeviceId) {
@@ -356,7 +343,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         authToken,
         isWebBrowser,
         cameraBaseUrl: getCameraBaseUrl(),
-        isDeviceConnected, // <- now reflects WS status
+        isDeviceConnected,
     };
 
     return (
