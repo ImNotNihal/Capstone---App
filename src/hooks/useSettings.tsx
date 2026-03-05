@@ -1,5 +1,6 @@
 import { useCallback, useContext, useEffect, useState } from "react";
 import { AppContext } from "@/src/context/app-context";
+import { API_BASE_URL } from "@/src/config";
 
 export type DeviceSettings = {
     notisEnabled: boolean;
@@ -28,7 +29,7 @@ export function useSettings() {
     const [error, setError] = useState<string | null>(null);
     const [updatingKeys, setUpdatingKeys] = useState<Set<SettingsKey>>(new Set());
 
-    const BASE_URL = "http://192.168.2.208:8000/";
+    const BASE_URL = API_BASE_URL;
 
     const headers = useCallback(() => {
         const h: Record<string, string> = { "Content-Type": "application/json" };

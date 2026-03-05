@@ -1,17 +1,37 @@
 /* eslint-disable no-bitwise */
-import {useCallback, useRef, useState} from "react";
-import {PermissionsAndroid, Platform} from "react-native";
 
+/**
+ * Bluetooth Low Energy hook.
+ *
+ * react-native-ble-plx is a native module that is NOT bundled inside Expo Go.
+ * To keep the rest of the app functional when running in Expo Go (QR-code
+ * scanning), this file uses:
+ *
+ *   • `import type` for TypeScript types only – erased at compile time, so
+ *     the module is never actually loaded by the JS runtime.
+ *   • A dynamic `require()` wrapped in try/catch for the actual runtime
+ *     instantiation – fails silently in Expo Go and the hook returns no-op
+ *     functions throughout the app.
+ *
+ * Full BLE functionality (connecting to the lock hardware, sending Wi-Fi
+ * credentials, etc.) requires a development build:
+ *   npx expo run:android   or   npx expo run:ios
+ */
+
+import { useCallback, useRef, useState } from "react";
+import { PermissionsAndroid, Platform } from "react-native";
 import * as ExpoDevice from "expo-device";
-
 import base64 from "react-native-base64";
-import {
+
+// ─── Type-only imports (erased at build time, safe in Expo Go) ───────────────
+import type {
+    BleManager as BleManagerType,
     BleError,
-    BleManager,
     Characteristic,
     Device,
 } from "react-native-ble-plx";
 
+// ─── Runtime: load native module only when available ─────────────────────────
 const SERVICE_UUID = "12345678-1234-1234-1234-1234567890ab";
 const COLOR_CHARACTERISTIC_UUID = "19b10001-e8f2-537e-4f6c-d104768a1217";
 const LOCK_STATE_CHARACTERISTIC_UUID = "12345678-1234-1234-1234-1234567890ad";
@@ -20,21 +40,30 @@ const MAC_ADDRESS_CHARACTERISTIC_UUID = "12345678-1234-1234-1234-1234567890ae";
 const DEVICE_TTL_MS = 6000;
 const PRUNE_INTERVAL_MS = 1000;
 
-let bleManager: BleManager | null = null;
-
+let BleManagerClass: any = null;
 try {
-    bleManager = new BleManager();
+    BleManagerClass = require("react-native-ble-plx").BleManager;
+} catch {
+    // BLE native module not available (e.g. Expo Go). All BLE operations will
+    // be no-ops and the app continues to work via the cloud API.
+}
+
+let bleManager: BleManagerType | null = null;
+try {
+    if (BleManagerClass) {
+        bleManager = new BleManagerClass();
+    }
 } catch (error) {
     bleManager = null;
 }
 
+// ─── Hook ─────────────────────────────────────────────────────────────────────
 
 function useBLEInternal() {
     const [allDevices, setAllDevices] = useState<Device[]>([]);
     const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
     const [color, setColor] = useState("white");
-    const [macAddress, setMacAddress] = useState("");
-    const seenDevicesRef = useRef(new Map<string, {device: Device; lastSeen: number}>());
+    const seenDevicesRef = useRef(new Map<string, { device: Device; lastSeen: number }>());
     const pruneTimerRef = useRef<NodeJS.Timeout | null>(null);
     const getBleManager = () => bleManager;
 
@@ -89,10 +118,7 @@ function useBLEInternal() {
                 );
                 return granted === PermissionsAndroid.RESULTS.GRANTED;
             } else {
-                const isAndroid31PermissionsGranted =
-                    await requestAndroid31Permissions();
-
-                return isAndroid31PermissionsGranted;
+                return await requestAndroid31Permissions();
             }
         } else {
             return true;
@@ -101,7 +127,7 @@ function useBLEInternal() {
 
     const connectToDevice = useCallback(async (device: Device) => {
         if (!bleManager) {
-            console.log("BleManager unavailable");
+            console.log("BleManager unavailable (Expo Go / web)");
             return;
         }
 
@@ -119,7 +145,7 @@ function useBLEInternal() {
 
     const disconnectFromDevice = useCallback(async (deviceId?: string) => {
         if (!bleManager) {
-            console.log("BleManager unavailable");
+            console.log("BleManager unavailable (Expo Go / web)");
             return;
         }
 
@@ -134,9 +160,6 @@ function useBLEInternal() {
             setConnectedDevice(null);
         }
     }, [connectedDevice?.id]);
-
-    const isDuplicateDevice = (devices: Device[], nextDevice: Device) =>
-        devices.findIndex((device) => nextDevice.id === device.id) > -1;
 
     const pruneStaleDevices = useCallback(() => {
         const now = Date.now();
@@ -172,35 +195,38 @@ function useBLEInternal() {
 
     const scanForPeripherals = useCallback(() => {
         if (!bleManager) {
-            console.log("BleManager unavailable");
+            console.log("BleManager unavailable (Expo Go / web)");
             return;
         }
         resetDevices();
         bleManager.stopDeviceScan().then(() => {});
         startPruneTimer();
-        
-        return bleManager.startDeviceScan(null, null, (error, device) => {
-            if (error) {
-                console.log(error);
-                return;
+
+        return bleManager.startDeviceScan(
+            null,
+            null,
+            (error: BleError | null, device: Device | null) => {
+                if (error) {
+                    console.log(error);
+                    return;
+                }
+
+                if (!device || !device.id) {
+                    return;
+                }
+
+                const deviceName = (device.localName || device.name || "").toLowerCase();
+                const isEsp = deviceName.includes("lock");
+                if (!isEsp) return;
+
+                seenDevicesRef.current.set(device.id, {
+                    device,
+                    lastSeen: Date.now(),
+                });
+
+                pruneStaleDevices();
             }
-
-            if (!device || !device.id) {
-                return;
-            }
-
-            const deviceName = (device.localName || device.name || "").toLowerCase();
-
-            const isEsp = deviceName.includes("lock");
-            if (!isEsp) return;
-
-            seenDevicesRef.current.set(device.id, {
-                device,
-                lastSeen: Date.now(),
-            });
-
-            pruneStaleDevices();
-        });
+        );
     }, [pruneStaleDevices, startPruneTimer, resetDevices]);
 
     const onDataUpdate = (
@@ -243,7 +269,7 @@ function useBLEInternal() {
 
     const subscribeToLockState = useCallback(async (
         d: Device | null | undefined,
-        callback = (value: string | null | undefined) => {}
+        callback = (_value: string | null | undefined) => {}
     ) => {
         if (!d) {
             console.log("No Device Connected");
@@ -253,7 +279,7 @@ function useBLEInternal() {
         d.monitorCharacteristicForService(
             SERVICE_UUID,
             LOCK_STATE_CHARACTERISTIC_UUID,
-            (error, characteristic) => {
+            (error: BleError | null, characteristic: Characteristic | null) => {
                 if (error) {
                     console.log("Monitor error:", error);
                     return;
@@ -261,17 +287,6 @@ function useBLEInternal() {
 
                 const decoded = decodeValue(characteristic?.value);
                 callback(decoded || "");
-
-                // if (characteristic?.value) {
-                //     const decoded = atob(characteristic.value); // base64 → string
-                //     console.log("Notification state:", decoded);
-                //
-                //     if (decoded === "LOCKED" || decoded === "UNLOCKED") {
-                //         setLockState(decoded);
-                //     } else {
-                //         setLockState("UNKNOWN");
-                //     }
-                // }
             }
         );
     }, []);
@@ -287,14 +302,13 @@ function useBLEInternal() {
             );
 
             if (char.value) {
-                const decoded = decodeValue(char.value); // base64 → string, e.g. "LOCKED"
-
-                return decoded;
+                return decodeValue(char.value);
             }
         } catch (e) {
             console.log("Read error:", e);
         }
     }, [connectedDevice]);
+
     const readLockState = useCallback(async (d?: Device) => {
         const target = d || connectedDevice;
         if (!target) return;
@@ -306,9 +320,7 @@ function useBLEInternal() {
             );
 
             if (char.value) {
-                const decoded = decodeValue(char.value); // base64 → string, e.g. "LOCKED"
-                
-                return decoded;
+                return decodeValue(char.value);
             }
         } catch (e) {
             console.log("Read error:", e);
@@ -317,7 +329,7 @@ function useBLEInternal() {
 
     const sendCommand = useCallback(async (command: string, device = connectedDevice) => {
         if (device) {
-            const base64Command = encodeValue(command); // string → base64
+            const base64Command = encodeValue(command);
 
             try {
                 await device.writeCharacteristicWithResponseForService(
@@ -331,12 +343,12 @@ function useBLEInternal() {
             }
         } else {
             console.log("No Device Connected");
-        } 
+        }
     }, [connectedDevice]);
 
     const stopScan = useCallback(() => {
         if (!bleManager) {
-            console.log("BleManager unavailable");
+            console.log("BleManager unavailable (Expo Go / web)");
             return;
         }
 
@@ -363,7 +375,8 @@ function useBLEInternal() {
         COLOR_CHARACTERISTIC_UUID,
         LOCK_STATE_CHARACTERISTIC_UUID,
         COMMAND_CHARACTERISTIC_UUID,
-        readMacAddress
+        readMacAddress,
     };
 }
+
 export default useBLEInternal;

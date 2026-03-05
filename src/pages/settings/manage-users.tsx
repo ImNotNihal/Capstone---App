@@ -2,6 +2,7 @@ import React, { useCallback, useContext, useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
 import styles from "./styles";
 import { AppContext } from "@/src/context/app-context";
+import { API_BASE_URL } from "@/src/config";
 
 const VALID_METHODS = ["face", "fingerprint", "keypad", "bluetooth"] as const;
 type AuthMethod = (typeof VALID_METHODS)[number];
@@ -34,7 +35,7 @@ export default function ManageUsers() {
     const [error, setError] = useState<string | null>(null);
     const [togglingMethod, setTogglingMethod] = useState<AuthMethod | null>(null);
 
-    const BASE_URL = "http://192.168.2.208:8000/";
+    const BASE_URL = API_BASE_URL;
 
     const headers = useCallback(() => {
         const h: Record<string, string> = { "Content-Type": "application/json" };
