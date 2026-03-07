@@ -6,6 +6,14 @@ import { API_BASE_URL } from "@/src/config";
 
 export const AppContext = createContext<any>(null);
 
+const FETCH_TIMEOUT_MS = 8000;
+
+function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs = FETCH_TIMEOUT_MS): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 export const AppProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<any | null>(null);
     const [authToken, setAuthToken] = useState<string | null>(null);
@@ -51,25 +59,23 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const httpLock = () => {
         if (!deviceId) return;
         const url = `${base_url}send-command/${deviceId}/LOCK`;
-        return fetch(url, { method: "POST", headers: authHeaders() });
+        return fetchWithTimeout(url, { method: "POST", headers: authHeaders() });
     };
 
     const httpUnlock = () => {
         if (!deviceId) return;
         const url = `${base_url}send-command/${deviceId}/UNLOCK`;
-        console.log("Sending unlock command to:", url);
-        return fetch(url, { method: "POST", headers: authHeaders() });
+        return fetchWithTimeout(url, { method: "POST", headers: authHeaders() });
     };
 
     const httpGetLockStatus = () => {
         if (!deviceId) return;
 
         const url = `${base_url}status/${deviceId}`;
-        return fetch(url, { method: "GET", headers: authHeaders() })
+        return fetchWithTimeout(url, { method: "GET", headers: authHeaders() })
             .then((response) => response.json())
             .then((data) => {
                 const status = data?.status;
-                console.log("Status:", data);
                 if (typeof status === "string") {
                     setIsLocked(status === "LOCKED");
                 }
@@ -109,11 +115,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 setAuthToken(storedToken);
             }
 
-            const fallbackDeviceId =
+            const storedDeviceId =
                 storedSession?.user?.deviceId ||
                 storedSession?.user?.device_id ||
-                "smartlock_5C567740C86C";
-            setDeviceId(fallbackDeviceId);
+                null;
+            if (storedDeviceId) {
+                setDeviceId(storedDeviceId);
+            }
         });
     }, []);
 
@@ -169,6 +177,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         };
 
         const scheduleReconnect = () => {
+            // Prevent double-scheduling: onerror fires before onclose on network failure
+            if (reconnectTimeoutRef.current) return;
+
             setIsDeviceConnected(false);
             wsRef.current = null;
 
@@ -178,8 +189,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
             console.log(`WS: scheduling reconnect in ${delay}ms (attempt ${attempt + 1})`);
 
-            clearReconnectTimeout();
             reconnectTimeoutRef.current = setTimeout(() => {
+                reconnectTimeoutRef.current = null;
                 if (!wsRef.current && deviceId) {
                     connectWebSocket();
                 }
@@ -258,7 +269,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             }
             return;
         }
-        const response = await fetch(`${base_url}auth/login`, {
+        const response = await fetchWithTimeout(`${base_url}auth/login`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -274,12 +285,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
 
         const data = await response.json();
-        console.log("Signin response:", data);
         const accessToken = data?.access_token ?? data?.token ?? null;
         const refreshToken = data?.refresh_token ?? null;
         setUser(data.user);
         if (accessToken) {
-            console.log("Got access token:", accessToken);
             setAuthToken(accessToken);
         }
         await AppStorage.setSession({ user: data.user, token: accessToken, refreshToken });
@@ -296,7 +305,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         firstName: string;
         lastName: string;
     }) => {
-        const response = await fetch(`${base_url}auth/signup`, {
+        const response = await fetchWithTimeout(`${base_url}auth/signup`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",

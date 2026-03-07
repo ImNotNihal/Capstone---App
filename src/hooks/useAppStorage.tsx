@@ -47,7 +47,11 @@ export class AppStorage {
         } else {
             saved = await AsyncStorage.getItem('session');
         }
-        return saved ? JSON.parse(saved) : null;
+        try {
+            return saved ? JSON.parse(saved) : null;
+        } catch {
+            return null;
+        }
     }
 
     static async setSession(session: {
