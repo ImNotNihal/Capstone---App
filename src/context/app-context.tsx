@@ -1,8 +1,8 @@
-import { createContext, ReactNode, useEffect, useRef, useState, useCallback } from "react";
 import { Toast } from "@/src/components/toast";
-import { AppStorage } from "@/src/hooks/useAppStorage";
-import { Platform } from "react-native";
 import { API_BASE_URL } from "@/src/config";
+import { AppStorage } from "@/src/hooks/useAppStorage";
+import { createContext, ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { Platform } from "react-native";
 
 export interface RequestLogEntry {
     id: string;
@@ -69,23 +69,34 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     // ========== Dev-mode fetch interceptor ==========
     useEffect(() => {
         if (!isDevMode) return;
-        const originalFetch = global.fetch;
-        global.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+        
+        // 1. Safely target the correct environment global (window for web, global for native)
+        const envGlobal = typeof window !== "undefined" ? window : global;
+        
+        // 2. Bind strictly to that environment to prevent Illegal Invocation
+        const originalFetch = envGlobal.fetch.bind(envGlobal); 
+        
+        envGlobal.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
             const id = String(Date.now() + Math.random());
             const method = (init?.method ?? "GET").toUpperCase();
-            const rawUrl = input.toString();
+            
+            const rawUrl = typeof input === 'string' ? input : (input && 'url' in input ? input.url : input.toString());
             const path = rawUrl.replace(API_BASE_URL, "").replace(/^\//, "");
+            
             const entry: RequestLogEntry = {
                 id, method, url: rawUrl, path,
                 timestamp: new Date(), status: "pending",
             };
             setRequestLogs(prev => [entry, ...prev]);
+            
             const start = Date.now();
             try {
                 const response = await originalFetch(input, init);
                 const durationMs = Date.now() - start;
+                
                 let responseData: any = null;
                 try { responseData = await response.clone().json(); } catch {}
+                
                 setRequestLogs(prev => prev.map(e => e.id === id ? {
                     ...e,
                     status: response.ok ? "pass" : "fail",
@@ -94,6 +105,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     errorMessage: response.ok ? undefined : `HTTP ${response.status} ${response.statusText}`,
                     durationMs,
                 } : e));
+                
                 return response;
             } catch (error: any) {
                 const durationMs = Date.now() - start;
@@ -106,7 +118,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 throw error;
             }
         };
-        return () => { global.fetch = originalFetch; };
+        
+        return () => { 
+            // 3. Restore the correct environment fetch on cleanup
+            envGlobal.fetch = originalFetch; 
+        };
     }, [isDevMode]);
 
     const authHeaders = useCallback(() => {
@@ -120,13 +136,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const httpLock = () => {
         if (!deviceId) return;
         const url = `${base_url}send-command/${deviceId}/LOCK`;
-        return fetchWithTimeout(url, { method: "POST", headers: authHeaders() });
+        return fetchWithTimeout(url, { method: "POST", headers: authHeaders() })
+            .catch(e => console.warn("Lock command failed:", e));
     };
 
     const httpUnlock = () => {
         if (!deviceId) return;
         const url = `${base_url}send-command/${deviceId}/UNLOCK`;
-        return fetchWithTimeout(url, { method: "POST", headers: authHeaders() });
+        return fetchWithTimeout(url, { method: "POST", headers: authHeaders() })
+            .catch(e => console.warn("Unlock command failed:", e));
     };
 
     const httpGetLockStatus = () => {
@@ -200,45 +218,19 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
         clearReconnectTimeout();
 
-        const wsUrl =
-            (base_url || "")
-                .replace(/^http:\/\//, "ws://")
-                .replace(/^https:\/\//, "wss://") + "ws/client";
+        let wsUrl = (base_url || "")
+            .replace(/^http:\/\//, "ws://")
+            .replace(/^https:\/\//, "wss://") + "ws/client";
+
+        // FIX: Prevent "The operation is insecure" Mixed Content errors on web
+        if (Platform.OS === "web" && typeof window !== "undefined" && window.location.protocol === "https:") {
+            wsUrl = wsUrl.replace(/^ws:\/\//, "wss://");
+        }
 
         console.log("Connecting WS client to:", wsUrl);
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
 
-        ws.onopen = () => {
-            console.log("Client WS connected");
-            setIsDeviceConnected(true);
-            reconnectAttemptsRef.current = 0;
-
-            const subMsg = JSON.stringify({
-                type: "subscribe",
-                deviceId: deviceId,
-            });
-            ws.send(subMsg);
-
-            httpGetLockStatus();
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                console.log("WS message:", event.data);
-                const data = JSON.parse(event.data);
-                if (data.type === "status" && data.deviceId === deviceId) {
-                    if (typeof data.status === "string") {
-                        setIsLocked(data.status === "LOCKED");
-                    }
-                }
-            } catch (e) {
-                console.log("WS message parse error:", e);
-            }
-        };
-
+        // 1. Move scheduleReconnect ABOVE so it can be used in the catch block
         const scheduleReconnect = () => {
-            // Prevent double-scheduling: onerror fires before onclose on network failure
             if (reconnectTimeoutRef.current) return;
 
             setIsDeviceConnected(false);
@@ -258,15 +250,53 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             }, delay);
         };
 
-        ws.onerror = (event) => {
-            console.log("WS error:", event);
-            scheduleReconnect();
-        };
+        // 2. Wrap WebSocket initialization in a try/catch
+        try {
+            const ws = new WebSocket(wsUrl);
+            wsRef.current = ws;
 
-        ws.onclose = (event) => {
-            console.log("Client WS closed:", event?.code, event?.reason);
+            ws.onopen = () => {
+                console.log("Client WS connected");
+                setIsDeviceConnected(true);
+                reconnectAttemptsRef.current = 0;
+
+                const subMsg = JSON.stringify({
+                    type: "subscribe",
+                    deviceId: deviceId,
+                });
+                ws.send(subMsg);
+
+                httpGetLockStatus();
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    console.log("WS message:", event.data);
+                    const data = JSON.parse(event.data);
+                    if (data.type === "status" && data.deviceId === deviceId) {
+                        if (typeof data.status === "string") {
+                            setIsLocked(data.status === "LOCKED");
+                        }
+                    }
+                } catch (e) {
+                    console.log("WS message parse error:", e);
+                }
+            };
+
+            ws.onerror = (event) => {
+                console.log("WS error:", event);
+                scheduleReconnect();
+            };
+
+            ws.onclose = (event) => {
+                console.log("Client WS closed:", event?.code, event?.reason);
+                scheduleReconnect();
+            };
+        } catch (error) {
+            // Safely catch SecurityError and fallback to retry without crashing React
+            console.error("Failed to construct WebSocket safely:", error);
             scheduleReconnect();
-        };
+        }
     }, [base_url, deviceId]);
 
     // Create/cleanup WS when deviceId changes
@@ -311,28 +341,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const signin = async (email: string, password: string) => {
+        // Enable request logging if it's the test account
         if (email === "test" && password === "test") {
-            const data = {
-                user: {
-                    id: 1,
-                    email: "",
-                    firstName: "test",
-                    lastName: "test",
-                    device_id: "smartlock_5C567740C86C",
-                },
-                token: "1",
-            };
-
-            setUser(data.user);
-            setAuthToken(data.token);
             setIsDevMode(true);
-            await AppStorage.setSession({ user: data.user, token: data.token });
-
-            if (data.user?.device_id) {
-                setDeviceId(data.user.device_id);
-            }
-            return;
         }
+
+        // Send the credentials to the REAL backend for all accounts, including 'test'
         const response = await fetchWithTimeout(`${base_url}auth/login`, {
             method: "POST",
             headers: {
@@ -352,9 +366,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const accessToken = data?.access_token ?? data?.token ?? null;
         const refreshToken = data?.refresh_token ?? null;
         setUser(data.user);
+        
         if (accessToken) {
             setAuthToken(accessToken);
         }
+        
         await AppStorage.setSession({ user: data.user, token: accessToken, refreshToken });
 
         const nextDeviceId = data.user?.deviceId ?? data.user?.device_id;
