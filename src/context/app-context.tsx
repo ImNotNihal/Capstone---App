@@ -305,7 +305,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         firstName: string;
         lastName: string;
     }) => {
-        const response = await fetchWithTimeout(`${base_url}auth/signup`, {
+        const response = await fetchWithTimeout(`${base_url}auth/register`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
