@@ -105,7 +105,11 @@ export default function Sensors() {
                     </TouchableOpacity>
 
                     {/* PIN Configuration */}
-                    <TouchableOpacity style={styles.configCard} activeOpacity={0.7}>
+                    <TouchableOpacity
+                        style={styles.configCard}
+                        activeOpacity={0.7}
+                        onPress={() => router.push("/sensors/pin-settings")}
+                    >
                         <MaterialCommunityIcons name="dialpad" size={24} color="#F59E0B" />
                         <View>
                             <Text style={styles.configTitle}>PIN Codes</Text>
@@ -115,7 +119,11 @@ export default function Sensors() {
                     </TouchableOpacity>
 
                     {/* Facial Recognition */}
-                    <TouchableOpacity style={styles.configCard} activeOpacity={0.7}>
+                    <TouchableOpacity
+                        style={styles.configCard}
+                        activeOpacity={0.7}
+                        onPress={() => router.push("/sensors/facial-settings")}
+                    >
                         <MaterialCommunityIcons name="face-recognition" size={24} color="#3B82F6" />
                         <View>
                             <Text style={styles.configTitle}>Face ID</Text>
@@ -125,7 +133,11 @@ export default function Sensors() {
                     </TouchableOpacity>
 
                     {/* Fingerprint Configuration */}
-                    <TouchableOpacity style={styles.configCard} activeOpacity={0.7}>
+                    <TouchableOpacity
+                        style={styles.configCard}
+                        activeOpacity={0.7}
+                        onPress={() => router.push("/sensors/biometric-settings")}
+                    >
                         <MaterialCommunityIcons name="fingerprint" size={24} color="#10B981" />
                         <View>
                             <Text style={styles.configTitle}>Biometrics</Text>
@@ -134,15 +146,6 @@ export default function Sensors() {
                         <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
                     </TouchableOpacity>
                 </View>
-
-                {/* ADVANCED SETTINGS PREVIEW */}
-                <TouchableOpacity style={styles.advancedSettingsItem}>
-                    <View style={styles.advancedLeft}>
-                        <MaterialCommunityIcons name="shield-sync" size={20} color="#A1A1AA" />
-                        <Text style={styles.advancedText}>Encrypted Key Management</Text>
-                    </View>
-                    <MaterialCommunityIcons name="chevron-right" size={20} color="#27272A" />
-                </TouchableOpacity>
 
             </Animated.ScrollView>
         </SafeAreaView>
@@ -275,26 +278,5 @@ const styles = StyleSheet.create({
         position: "absolute",
         bottom: 16,
         right: 16,
-    },
-    advancedSettingsItem: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        backgroundColor: "#09090B",
-        marginTop: 24,
-        padding: 16,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: "#18181B",
-    },
-    advancedLeft: {
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 12,
-    },
-    advancedText: {
-        color: "#A1A1AA",
-        fontSize: 14,
-        fontWeight: "500",
     },
 });
