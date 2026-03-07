@@ -11,7 +11,9 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "ios:pods": "cd ios && pod install && cd ..",
-    "ios:open": "xed -b ios"
+    "ios:open": "xed -b ios",
+    "test": "jest",
+    "test:coverage": "jest --coverage"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -50,10 +52,13 @@
   "devDependencies": {
     "@react-native-community/cli": "latest",
     "@react-native/metro-config": "latest",
+    "@testing-library/react-native": "^13.3.3",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.1.0",
     "@types/react-native-base64": "^0.2.2",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~10.0.0",
+    "jest-expo": "^55.0.9",
     "typescript": "~5.9.2"
   },
   "private": true
