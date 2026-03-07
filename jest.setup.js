@@ -1,6 +1,6 @@
 // Mock AsyncStorage (native module not available in Jest)
 jest.mock("@react-native-async-storage/async-storage", () =>
-    require("@react-native-async-storage/async-storage/jest/setup")
+    require("@react-native-async-storage/async-storage/jest/async-storage-mock")
 );
 
 // Mock react-native-base64 using Node's built-in Buffer
