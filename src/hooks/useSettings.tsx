@@ -4,22 +4,47 @@ import { API_BASE_URL } from "@/src/config";
 
 export type DeviceSettings = {
     notisEnabled: boolean;
+    autoLock: boolean;
+    autoLockTimeout: number;   // seconds
+    failedAttemptLimit: number;
+    motionSensitivity: string; // "low" | "medium" | "high"
+    cameraEnabled: boolean;
 };
 
 const DEFAULTS: DeviceSettings = {
     notisEnabled: true,
+    autoLock: true,
+    autoLockTimeout: 30,
+    failedAttemptLimit: 5,
+    motionSensitivity: "medium",
+    cameraEnabled: true,
 };
 
 type SettingsKey = keyof DeviceSettings;
 
 const FETCH_TIMEOUT_MS = 8000;
 
-/** Wraps fetch with an AbortController timeout */
 function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs: number): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-
     return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
+function mapResponse(data: any): DeviceSettings {
+    return {
+        notisEnabled: data.alertsEnabled ?? data.notisEnabled ?? DEFAULTS.notisEnabled,
+        autoLock: data.autoLock ?? DEFAULTS.autoLock,
+        autoLockTimeout: data.autoLockTimeout ?? DEFAULTS.autoLockTimeout,
+        failedAttemptLimit: data.failedAttemptLimit ?? DEFAULTS.failedAttemptLimit,
+        motionSensitivity: data.motionSensitivity ?? DEFAULTS.motionSensitivity,
+        cameraEnabled: data.cameraEnabled ?? DEFAULTS.cameraEnabled,
+    };
+}
+
+// Map frontend key → backend key
+function toBackendKey(key: SettingsKey): string {
+    if (key === "notisEnabled") return "alertsEnabled";
+    return key;
 }
 
 export function useSettings() {
@@ -28,8 +53,6 @@ export function useSettings() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [updatingKeys, setUpdatingKeys] = useState<Set<SettingsKey>>(new Set());
-
-    const BASE_URL = API_BASE_URL;
 
     const headers = useCallback(() => {
         const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -50,7 +73,7 @@ export function useSettings() {
 
         try {
             const response = await fetchWithTimeout(
-                `${BASE_URL}settings/${deviceId}`,
+                `${API_BASE_URL}settings/${deviceId}`,
                 { method: "GET", headers: headers() },
                 FETCH_TIMEOUT_MS,
             );
@@ -61,10 +84,7 @@ export function useSettings() {
             }
 
             const data = await response.json();
-            setSettings({
-                // Backend uses alertsEnabled; map to the frontend notisEnabled alias
-                notisEnabled: data.alertsEnabled ?? data.notisEnabled ?? DEFAULTS.notisEnabled,
-            });
+            setSettings(mapResponse(data));
         } catch (e: any) {
             console.log("Settings fetch error:", e);
             setError(e.name === "AbortError" ? "Server unreachable" : (e.message || "Failed to load settings"));
@@ -79,7 +99,7 @@ export function useSettings() {
     }, [fetchSettings]);
 
     const updateSetting = useCallback(
-        async (key: SettingsKey, value: boolean) => {
+        async (key: SettingsKey, value: boolean | number | string) => {
             if (!deviceId) return;
 
             const previousValue = settings[key];
@@ -87,10 +107,9 @@ export function useSettings() {
             setUpdatingKeys((prev) => new Set(prev).add(key));
 
             try {
-                // Map frontend notisEnabled to backend alertsEnabled
-            const backendKey = key === "notisEnabled" ? "alertsEnabled" : key;
-            const response = await fetchWithTimeout(
-                    `${BASE_URL}settings/${deviceId}`,
+                const backendKey = toBackendKey(key);
+                const response = await fetchWithTimeout(
+                    `${API_BASE_URL}settings/${deviceId}`,
                     {
                         method: "PUT",
                         headers: headers(),
@@ -105,16 +124,7 @@ export function useSettings() {
                 }
 
                 const data = await response.json();
-                if (data.settings) {
-                    setSettings({
-                        notisEnabled: data.settings.alertsEnabled ?? data.settings.notisEnabled ?? DEFAULTS.notisEnabled,
-                    });
-                } else {
-                    // Backend returns the updated SettingsOut directly (not wrapped in data.settings)
-                    setSettings({
-                        notisEnabled: data.alertsEnabled ?? data.notisEnabled ?? DEFAULTS.notisEnabled,
-                    });
-                }
+                setSettings(mapResponse(data));
             } catch (e: any) {
                 console.log("Settings update error:", e);
                 setSettings((prev) => ({ ...prev, [key]: previousValue }));

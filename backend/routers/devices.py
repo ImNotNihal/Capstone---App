@@ -125,3 +125,25 @@ async def status_alias(
     data = get_device_status(device_id)
     data["isOnline"] = manager.device_is_online(device_id)
     return data
+
+
+@router.get(
+    "/devices/{device_id}/info",
+    summary="Get device metadata and current user's role",
+)
+async def device_info(
+    device_id: str = Path(...),
+    current_user: dict = Depends(get_current_user),
+):
+    from services.device_service import get_device
+    data = get_device(device_id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Device not found.")
+    owner_id = data.get("ownerId")
+    role = "owner" if current_user["uid"] == owner_id else "guest"
+    return {
+        "deviceId": device_id,
+        "name": data.get("name"),
+        "ownerId": owner_id,
+        "role": role,
+    }

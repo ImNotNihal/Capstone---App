@@ -25,17 +25,18 @@ type CredentialState = Record<AuthMethod, boolean>;
 
 export default function ManageUsers() {
     const { user, authToken, deviceId } = useContext(AppContext);
+
     const [credentials, setCredentials] = useState<CredentialState>({
         face: false,
         fingerprint: false,
         keypad: false,
         bluetooth: false,
     });
-    const [loading, setLoading] = useState(true);
+    const [userRole, setUserRole] = useState<string | null>(null);
+    const [loadingCreds, setLoadingCreds] = useState(true);
+    const [loadingRole, setLoadingRole] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [togglingMethod, setTogglingMethod] = useState<AuthMethod | null>(null);
-
-    const BASE_URL = API_BASE_URL;
 
     const headers = useCallback(() => {
         const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -43,25 +44,49 @@ export default function ManageUsers() {
         return h;
     }, [authToken]);
 
-    // Fetch current credentials
-    const fetchCredentials = useCallback(async () => {
-        if (!authToken) {
-            setLoading(false);
+    // Fetch user role from device info
+    const fetchRole = useCallback(async () => {
+        if (!authToken || !deviceId) {
+            setLoadingRole(false);
             return;
         }
-        setLoading(true);
-        setError(null);
+        setLoadingRole(true);
         try {
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-            const response = await fetch(`${BASE_URL}credentials/me`, {
+            const res = await fetch(`${API_BASE_URL}devices/${deviceId}/info`, {
                 headers: headers(),
                 signal: controller.signal,
             });
             clearTimeout(timer);
+            if (!res.ok) throw new Error("Failed to load role");
+            const data = await res.json();
+            setUserRole(data.role ?? "guest");
+        } catch {
+            setUserRole("guest");
+        } finally {
+            setLoadingRole(false);
+        }
+    }, [authToken, deviceId, headers]);
 
-            if (!response.ok) throw new Error("Failed to load credentials");
-            const data = await response.json();
+    // Fetch current credentials
+    const fetchCredentials = useCallback(async () => {
+        if (!authToken) {
+            setLoadingCreds(false);
+            return;
+        }
+        setLoadingCreds(true);
+        setError(null);
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+            const res = await fetch(`${API_BASE_URL}credentials/me`, {
+                headers: headers(),
+                signal: controller.signal,
+            });
+            clearTimeout(timer);
+            if (!res.ok) throw new Error("Failed to load credentials");
+            const data = await res.json();
             const methods = data.authMethods || {};
             setCredentials({
                 face: methods.face?.isActive ?? false,
@@ -72,39 +97,35 @@ export default function ManageUsers() {
         } catch (e: any) {
             setError(e.name === "AbortError" ? "Server unreachable" : (e.message || "Failed to load"));
         } finally {
-            setLoading(false);
+            setLoadingCreds(false);
         }
     }, [authToken, headers]);
 
     useEffect(() => {
+        fetchRole();
         fetchCredentials();
-    }, [fetchCredentials]);
+    }, [fetchRole, fetchCredentials]);
 
-    // Toggle a credential method on/off
     const toggleMethod = async (method: AuthMethod, enable: boolean) => {
         const prev = credentials[method];
         setCredentials((c) => ({ ...c, [method]: enable }));
         setTogglingMethod(method);
-
         try {
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
             const endpoint = enable ? "enroll" : "revoke";
-            const response = await fetch(`${BASE_URL}credentials/me/${endpoint}`, {
+            const res = await fetch(`${API_BASE_URL}credentials/me/${endpoint}`, {
                 method: "POST",
                 headers: headers(),
                 body: JSON.stringify({ method }),
                 signal: controller.signal,
             });
             clearTimeout(timer);
-
-            if (!response.ok) {
-                const body = await response.json().catch(() => ({}));
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
                 throw new Error(body?.detail || "Failed to update");
             }
         } catch (e: any) {
-            // Rollback
             setCredentials((c) => ({ ...c, [method]: prev }));
             setError(e.message || "Failed to update credential");
         } finally {
@@ -112,9 +133,8 @@ export default function ManageUsers() {
         }
     };
 
-    // Determine user role (default to owner for now)
-    const userRole = "owner";
-    const permissions = ROLE_PERMISSIONS[userRole] || [];
+    const role = userRole ?? "guest";
+    const permissions = ROLE_PERMISSIONS[role] ?? [];
 
     return (
         <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
@@ -136,9 +156,13 @@ export default function ManageUsers() {
                             <Text style={styles.profileName}>
                                 {user ? `${user.firstName} ${user.lastName}` : "Current User"}
                             </Text>
-                            <Text style={localStyles.ownerBadge}>
-                                {userRole.charAt(0).toUpperCase() + userRole.slice(1)}
-                            </Text>
+                            {loadingRole ? (
+                                <ActivityIndicator size="small" color="#2563eb" />
+                            ) : (
+                                <Text style={localStyles.ownerBadge}>
+                                    {role.charAt(0).toUpperCase() + role.slice(1)}
+                                </Text>
+                            )}
                         </View>
                         <Text style={styles.profileEmail}>{user?.email || ""}</Text>
                     </View>
@@ -148,19 +172,31 @@ export default function ManageUsers() {
             {/* Role permissions */}
             <View>
                 <Text style={styles.sectionTitle}>Permissions</Text>
-                <View style={styles.card}>
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                        {permissions.map((perm) => (
-                            <Text key={perm} style={localStyles.permBadge}>{perm}</Text>
-                        ))}
+                {loadingRole ? (
+                    <View style={[styles.card, { alignItems: "center", paddingVertical: 16 }]}>
+                        <ActivityIndicator size="small" color="#2563eb" />
                     </View>
-                </View>
+                ) : (
+                    <View style={styles.card}>
+                        {permissions.length === 0 ? (
+                            <Text style={{ color: "#6b7280", fontSize: 13 }}>No permissions</Text>
+                        ) : (
+                            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                                {permissions.map((perm) => (
+                                    <Text key={perm} style={localStyles.permBadge}>
+                                        {perm}
+                                    </Text>
+                                ))}
+                            </View>
+                        )}
+                    </View>
+                )}
             </View>
 
-            {/* Access Methods - toggles wired to backend */}
+            {/* Access Methods */}
             <View>
                 <Text style={styles.sectionTitle}>Access Methods</Text>
-                {loading ? (
+                {loadingCreds ? (
                     <View style={[styles.card, { alignItems: "center", paddingVertical: 24 }]}>
                         <ActivityIndicator size="small" color="#2563eb" />
                         <Text style={[styles.rowSubtitle, { marginTop: 8 }]}>Loading credentials...</Text>
@@ -181,9 +217,25 @@ export default function ManageUsers() {
                                 const isToggling = togglingMethod === method;
                                 return (
                                     <View key={method} style={styles.settingToggleRow}>
-                                        <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 1 }}>
-                                            <View style={[styles.circleIcon, { backgroundColor: `${info.color}1a` }]}>
-                                                <Text style={[styles.circleIconText, { color: info.color }]}>{info.icon}</Text>
+                                        <View
+                                            style={{
+                                                flexDirection: "row",
+                                                alignItems: "center",
+                                                gap: 12,
+                                                flexShrink: 1,
+                                            }}
+                                        >
+                                            <View
+                                                style={[
+                                                    styles.circleIcon,
+                                                    { backgroundColor: `${info.color}1a` },
+                                                ]}
+                                            >
+                                                <Text
+                                                    style={[styles.circleIconText, { color: info.color }]}
+                                                >
+                                                    {info.icon}
+                                                </Text>
                                             </View>
                                             <View style={{ flexShrink: 1 }}>
                                                 <Text style={styles.rowTitle}>{info.label}</Text>
@@ -214,7 +266,9 @@ export default function ManageUsers() {
                 </View>
                 <View style={styles.infoRow}>
                     <Text style={styles.infoLabel}>Role</Text>
-                    <Text style={styles.infoValue}>{userRole.charAt(0).toUpperCase() + userRole.slice(1)}</Text>
+                    <Text style={styles.infoValue}>
+                        {loadingRole ? "..." : role.charAt(0).toUpperCase() + role.slice(1)}
+                    </Text>
                 </View>
             </View>
         </ScrollView>
