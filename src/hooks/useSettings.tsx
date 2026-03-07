@@ -62,7 +62,8 @@ export function useSettings() {
 
             const data = await response.json();
             setSettings({
-                notisEnabled: data.notisEnabled ?? DEFAULTS.notisEnabled,
+                // Backend uses alertsEnabled; map to the frontend notisEnabled alias
+                notisEnabled: data.alertsEnabled ?? data.notisEnabled ?? DEFAULTS.notisEnabled,
             });
         } catch (e: any) {
             console.log("Settings fetch error:", e);
@@ -86,12 +87,14 @@ export function useSettings() {
             setUpdatingKeys((prev) => new Set(prev).add(key));
 
             try {
-                const response = await fetchWithTimeout(
-                    `${BASE_URL}settings/${deviceId}/user`,
+                // Map frontend notisEnabled to backend alertsEnabled
+            const backendKey = key === "notisEnabled" ? "alertsEnabled" : key;
+            const response = await fetchWithTimeout(
+                    `${BASE_URL}settings/${deviceId}`,
                     {
                         method: "PUT",
                         headers: headers(),
-                        body: JSON.stringify({ [key]: value }),
+                        body: JSON.stringify({ [backendKey]: value }),
                     },
                     FETCH_TIMEOUT_MS,
                 );
@@ -104,7 +107,12 @@ export function useSettings() {
                 const data = await response.json();
                 if (data.settings) {
                     setSettings({
-                        notisEnabled: data.settings.notisEnabled ?? DEFAULTS.notisEnabled,
+                        notisEnabled: data.settings.alertsEnabled ?? data.settings.notisEnabled ?? DEFAULTS.notisEnabled,
+                    });
+                } else {
+                    // Backend returns the updated SettingsOut directly (not wrapped in data.settings)
+                    setSettings({
+                        notisEnabled: data.alertsEnabled ?? data.notisEnabled ?? DEFAULTS.notisEnabled,
                     });
                 }
             } catch (e: any) {
