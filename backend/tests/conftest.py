@@ -82,6 +82,7 @@ def mock_db(app):
         patch("routers.auth.db", mock),
         patch("routers.settings.db", mock),
         patch("services.device_service.db", mock),
+        patch("services.event_service.db", mock),
         patch("middleware.auth.db", mock),
     ]
 
@@ -117,6 +118,20 @@ def auth_headers():
 
     with patch("middleware.auth.get_current_user", return_value=test_user):
         yield {"Authorization": f"Bearer {token}"}, test_user, uid
+
+
+@pytest.fixture(autouse=True)
+def reset_ws_manager():
+    """
+    Clear the WebSocket manager singleton before and after every test so
+    connections from one test can't bleed into the next.
+    """
+    from ws.manager import manager
+    manager._devices.clear()
+    manager._clients.clear()
+    yield
+    manager._devices.clear()
+    manager._clients.clear()
 
 
 # ─── Expose helpers for test modules ─────────────────────────────────────────

@@ -1,29 +1,32 @@
 import {TouchableOpacity, Text, View, Image} from "react-native";
 import { usePathname, useRouter } from "expo-router";
+import { useContext } from "react";
+import { AppContext } from "@/src/context/app-context";
 import styles from "./styles";
 
 const Navbar = () => {
     const router = useRouter();
     const pathname = usePathname();
+    const { isDevMode } = useContext(AppContext);
 
     const sections = [
         {
             name: "Home",
             imgSrc: require("../../assets/images/house.png"),
             path: "/",
-        }, 
+        },
         {
             name: "Events",
             imgSrc: require("../../assets/images/history.png"),
             path: "/events",
 
-        }, 
+        },
         {
             name: "Sensors",
             imgSrc: require("../../assets/images/radar.png"),
             path: "/sensors",
 
-        }, 
+        },
         {
             name: "Settings",
             imgSrc: require("../../assets/images/settings.png"),
@@ -33,7 +36,13 @@ const Navbar = () => {
             name: "Testing",
             imgSrc: require("../../assets/images/house.png"),
             path: "/testing",
-        }]
+        },
+        ...(isDevMode ? [{
+            name: "Logs",
+            imgSrc: require("../../assets/images/history.png"),
+            path: "/logs",
+        }] : []),
+    ];
 
     const handleNavigate = (path?: string) => {
         if (!path || pathname === path) return;
@@ -42,7 +51,7 @@ const Navbar = () => {
 
     return (
         <View style={styles.container}>
-            
+
             {
                 sections.map((section, index) =>
                     <TouchableOpacity

@@ -4,6 +4,19 @@ import { AppStorage } from "@/src/hooks/useAppStorage";
 import { Platform } from "react-native";
 import { API_BASE_URL } from "@/src/config";
 
+export interface RequestLogEntry {
+    id: string;
+    timestamp: Date;
+    method: string;
+    url: string;
+    path: string;
+    status: "pending" | "pass" | "fail";
+    statusCode?: number;
+    responseData?: any;
+    errorMessage?: string;
+    durationMs?: number;
+}
+
 export const AppContext = createContext<any>(null);
 
 const FETCH_TIMEOUT_MS = 8000;
@@ -33,6 +46,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         variant: "default",
     });
 
+    const [isDevMode, setIsDevMode] = useState(false);
+    const [requestLogs, setRequestLogs] = useState<RequestLogEntry[]>([]);
+
+    const clearLogs = useCallback(() => setRequestLogs([]), []);
+
     const isWebBrowser = Platform.OS === "web";
 
     const wsRef = useRef<WebSocket | null>(null);
@@ -47,6 +65,49 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             reconnectTimeoutRef.current = null;
         }
     };
+
+    // ========== Dev-mode fetch interceptor ==========
+    useEffect(() => {
+        if (!isDevMode) return;
+        const originalFetch = global.fetch;
+        global.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+            const id = String(Date.now() + Math.random());
+            const method = (init?.method ?? "GET").toUpperCase();
+            const rawUrl = input.toString();
+            const path = rawUrl.replace(API_BASE_URL, "").replace(/^\//, "");
+            const entry: RequestLogEntry = {
+                id, method, url: rawUrl, path,
+                timestamp: new Date(), status: "pending",
+            };
+            setRequestLogs(prev => [entry, ...prev]);
+            const start = Date.now();
+            try {
+                const response = await originalFetch(input, init);
+                const durationMs = Date.now() - start;
+                let responseData: any = null;
+                try { responseData = await response.clone().json(); } catch {}
+                setRequestLogs(prev => prev.map(e => e.id === id ? {
+                    ...e,
+                    status: response.ok ? "pass" : "fail",
+                    statusCode: response.status,
+                    responseData,
+                    errorMessage: response.ok ? undefined : `HTTP ${response.status} ${response.statusText}`,
+                    durationMs,
+                } : e));
+                return response;
+            } catch (error: any) {
+                const durationMs = Date.now() - start;
+                setRequestLogs(prev => prev.map(e => e.id === id ? {
+                    ...e,
+                    status: "fail",
+                    errorMessage: error.name === "AbortError" ? "Request timed out" : (error.message ?? "Unknown error"),
+                    durationMs,
+                } : e));
+                throw error;
+            }
+        };
+        return () => { global.fetch = originalFetch; };
+    }, [isDevMode]);
 
     const authHeaders = useCallback(() => {
         const headers: Record<string, string> = {};
@@ -238,6 +299,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setUser(null);
         setAuthToken(null);
         setDeviceId(null);
+        setIsDevMode(false);
+        setRequestLogs([]);
 
         clearReconnectTimeout();
         if (wsRef.current) {
@@ -262,6 +325,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
             setUser(data.user);
             setAuthToken(data.token);
+            setIsDevMode(true);
             await AppStorage.setSession({ user: data.user, token: data.token });
 
             if (data.user?.device_id) {
@@ -305,7 +369,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         firstName: string;
         lastName: string;
     }) => {
-        const response = await fetchWithTimeout(`${base_url}auth/signup`, {
+        const response = await fetchWithTimeout(`${base_url}auth/register`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -353,6 +417,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         isWebBrowser,
         cameraBaseUrl: getCameraBaseUrl(),
         isDeviceConnected,
+        isDevMode,
+        requestLogs,
+        clearLogs,
     };
 
     return (
