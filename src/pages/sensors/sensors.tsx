@@ -1,371 +1,300 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
+    Animated,
+    Dimensions,
+    SafeAreaView,
+    StatusBar,
     StyleSheet,
     Switch,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
-import styles from "./styles";
-import { AppContext } from "../../context/app-context";
-import { API_BASE_URL } from "@/src/config";
-import { useRouter } from "expo-router";
 
-type SensorType = "Lock" | "Motion" | "Camera" | "Contact";
-
-type Sensor = {
-    id: string;
-    name: string;
-    type: SensorType;
-    status: "active" | "inactive";
-    battery: number | null;
-    location: string;
-    lastUpdate: string;
-};
-
-const TYPE_ICONS: Record<SensorType, any> = {
-    Lock: require("../../assets/images/lock.png"),
-    Motion: require("../../assets/images/radar.png"),
-    Camera: require("../../assets/images/camera.png"),
-    Contact: require("../../assets/images/lock-open.png"),
-};
-
-const FETCH_TIMEOUT = 8000;
-
-function timeAgo(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return "Just now";
-    if (minutes < 60) return `${minutes} min ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
-}
+const { width } = Dimensions.get("window");
+const COLUMN_WIDTH = (width - 52) / 2;
 
 export default function Sensors() {
-    const { user, authToken, deviceId } = useContext(AppContext);
     const router = useRouter();
-    const [sensors, setSensors] = useState<Sensor[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [togglingId, setTogglingId] = useState<string | null>(null);
-
-    const headers = useCallback(() => {
-        const h: Record<string, string> = { "Content-Type": "application/json" };
-        if (authToken) h["Authorization"] = `Bearer ${authToken}`;
-        return h;
-    }, [authToken]);
-
-    const fetchSensors = useCallback(async () => {
-        if (!deviceId || !authToken) {
-            setLoading(false);
-            return;
-        }
-        setLoading(true);
-        setError(null);
-        try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-            const res = await fetch(`${API_BASE_URL}devices/${deviceId}/sensors`, {
-                headers: headers(),
-                signal: controller.signal,
-            });
-            clearTimeout(timer);
-            if (!res.ok) throw new Error("Failed to load sensors");
-            const data: Sensor[] = await res.json();
-            setSensors(data);
-        } catch (e: any) {
-            setError(e.name === "AbortError" ? "Server unreachable" : (e.message || "Failed to load"));
-        } finally {
-            setLoading(false);
-        }
-    }, [authToken, deviceId, headers]);
+    const [isLocked, setIsLocked] = useState(true);
+    const [motionEnabled, setMotionEnabled] = useState(true);
+    
+    const fadeAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
-        fetchSensors();
-    }, [fetchSensors]);
-
-    const toggleSensor = async (sensor: Sensor) => {
-        const next = sensor.status === "active" ? "inactive" : "active";
-        const prev = sensor.status;
-        setSensors((s) => s.map((x) => (x.id === sensor.id ? { ...x, status: next } : x)));
-        setTogglingId(sensor.id);
-        try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-            const res = await fetch(`${API_BASE_URL}devices/${deviceId}/sensors/${sensor.id}`, {
-                method: "PATCH",
-                headers: headers(),
-                body: JSON.stringify({ status: next }),
-                signal: controller.signal,
-            });
-            clearTimeout(timer);
-            if (!res.ok) throw new Error("Failed to update sensor");
-            const updated: Sensor = await res.json();
-            setSensors((s) => s.map((x) => (x.id === sensor.id ? updated : x)));
-        } catch (e: any) {
-            setSensors((s) => s.map((x) => (x.id === sensor.id ? { ...x, status: prev } : x)));
-            setError(e.message || "Failed to update sensor");
-        } finally {
-            setTogglingId(null);
-        }
-    };
-
-    const stats = useMemo(() => {
-        const active = sensors.filter((s) => s.status === "active").length;
-        const inactive = sensors.length - active;
-        const lowBattery = sensors.filter((s) => typeof s.battery === "number" && s.battery < 50).length;
-        return { active, inactive, lowBattery, total: sensors.length };
-    }, [sensors]);
-
-    if (!user) {
-        return (
-            <View style={[styles.screen, authStyles.container]}>
-                <Text style={authStyles.title}>You are not logged in</Text>
-                <Text style={authStyles.subtitle}>Log in from Settings to use the app.</Text>
-                <TouchableOpacity onPress={() => router.push("/settings")} style={authStyles.button}>
-                    <Text style={authStyles.buttonText}>Go to Settings</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
+        Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+        }).start();
+    }, []);
 
     return (
-        <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
+        <SafeAreaView style={styles.container}>
+            <StatusBar barStyle="light-content" />
+            
+            {/* CLEAN HEADER: Title only */}
             <View style={styles.header}>
-                <Text style={styles.title}>Sensors & Devices</Text>
-                <Text style={styles.subtitle}>
-                    {loading ? "Loading..." : `${stats.active} of ${stats.total} sensors active`}
-                </Text>
+                <Text style={styles.headerTitle}>Access Control</Text>
             </View>
 
-            {/* Error banner */}
-            {error && !loading && (
-                <View style={localStyles.errorBanner}>
-                    <Text style={localStyles.errorText}>{error}</Text>
-                    <TouchableOpacity onPress={fetchSensors}>
-                        <Text style={localStyles.retryText}>Retry</Text>
+            {/* Ghost area for layout stability */}
+            <View style={styles.ghostContainer} />
+
+            <Animated.ScrollView 
+                style={{ opacity: fadeAnim }}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* PRIMARY STATUS: FRONT DOOR */}
+                <TouchableOpacity 
+                    style={[styles.mainCard, !isLocked && styles.mainCardUnlocked]} 
+                    onPress={() => setIsLocked(!isLocked)}
+                    activeOpacity={0.9}
+                >
+                    <View style={styles.mainCardHeader}>
+                        <View style={[styles.mainIconWrapper, { backgroundColor: isLocked ? "#10B98120" : "#EF444420" }]}>
+                            <MaterialCommunityIcons 
+                                name={isLocked ? "lock" : "lock-open"} 
+                                size={32} 
+                                color={isLocked ? "#10B981" : "#EF4444"} 
+                            />
+                        </View>
+                        <View style={styles.batteryBadge}>
+                            <MaterialCommunityIcons name="battery" size={14} color="#71717A" />
+                            <Text style={styles.batteryText}>92%</Text>
+                        </View>
+                    </View>
+                    <View style={styles.mainCardBody}>
+                        <Text style={styles.mainCardTitle}>Front Door</Text>
+                        <Text style={styles.mainCardStatus}>
+                            Current State: <Text style={{ color: isLocked ? "#10B981" : "#EF4444" }}>{isLocked ? "Locked" : "Unlocked"}</Text>
+                        </Text>
+                    </View>
+                    <View style={styles.mainCardFooter}>
+                        <Text style={styles.tapHint}>Tap to {isLocked ? "Unlock" : "Lock"}</Text>
+                    </View>
+                </TouchableOpacity>
+
+                <Text style={styles.sectionLabel}>Configuration</Text>
+
+                {/* CONFIGURATION GRID */}
+                <View style={styles.grid}>
+                    {/* Motion Detection */}
+                    <TouchableOpacity 
+                        style={styles.configCard}
+                        onPress={() => router.push("/sensors/motion-settings")}
+                        activeOpacity={0.7}
+                    >
+                        <View style={styles.configHeader}>
+                            <MaterialCommunityIcons name="run-fast" size={24} color="#8B5CF6" />
+                            <Switch 
+                                value={motionEnabled} 
+                                onValueChange={(val) => setMotionEnabled(val)}
+                                trackColor={{ false: "#27272A", true: "#8B5CF650" }}
+                                thumbColor={motionEnabled ? "#8B5CF6" : "#71717A"}
+                            />
+                        </View>
+                        <View>
+                            <Text style={styles.configTitle}>Motion</Text>
+                            <Text style={styles.configDesc}>Setup zones</Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
+                    </TouchableOpacity>
+
+                    {/* PIN Configuration */}
+                    <TouchableOpacity style={styles.configCard} activeOpacity={0.7}>
+                        <MaterialCommunityIcons name="dialpad" size={24} color="#F59E0B" />
+                        <View>
+                            <Text style={styles.configTitle}>PIN Codes</Text>
+                            <Text style={styles.configDesc}>Access keys</Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
+                    </TouchableOpacity>
+
+                    {/* Facial Recognition */}
+                    <TouchableOpacity style={styles.configCard} activeOpacity={0.7}>
+                        <MaterialCommunityIcons name="face-recognition" size={24} color="#3B82F6" />
+                        <View>
+                            <Text style={styles.configTitle}>Face ID</Text>
+                            <Text style={styles.configDesc}>4 Profiles</Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
+                    </TouchableOpacity>
+
+                    {/* Fingerprint Configuration */}
+                    <TouchableOpacity style={styles.configCard} activeOpacity={0.7}>
+                        <MaterialCommunityIcons name="fingerprint" size={24} color="#10B981" />
+                        <View>
+                            <Text style={styles.configTitle}>Biometrics</Text>
+                            <Text style={styles.configDesc}>Scanner</Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
                     </TouchableOpacity>
                 </View>
-            )}
 
-            {/* Loading state */}
-            {loading ? (
-                <View style={localStyles.centerBox}>
-                    <ActivityIndicator size="large" color="#2563eb" />
-                    <Text style={localStyles.loadingText}>Loading sensors...</Text>
-                </View>
-            ) : !error && sensors.length === 0 ? (
-                /* Empty state */
-                <View style={localStyles.centerBox}>
-                    <Text style={localStyles.emptyTitle}>No sensors found</Text>
-                    <Text style={localStyles.emptySubtitle}>No sensors are registered for this device.</Text>
-                    <TouchableOpacity onPress={fetchSensors} style={localStyles.retryButton}>
-                        <Text style={localStyles.retryButtonText}>Refresh</Text>
-                    </TouchableOpacity>
-                </View>
-            ) : (
-                /* Sensor list */
-                <View style={styles.list}>
-                    {sensors.map((sensor) => {
-                        const icon = TYPE_ICONS[sensor.type] ?? TYPE_ICONS.Contact;
-                        const isToggling = togglingId === sensor.id;
-                        const lastUpdateLabel =
-                            sensor.type === "Camera" && sensor.status === "active"
-                                ? "Live"
-                                : timeAgo(sensor.lastUpdate);
-
-                        return (
-                            <View key={sensor.id} style={styles.card}>
-                                <View style={styles.cardTop}>
-                                    <View style={styles.iconTitle}>
-                                        <View
-                                            style={[
-                                                styles.iconBadge,
-                                                sensor.status === "active"
-                                                    ? styles.iconBadgeActive
-                                                    : styles.iconBadgeInactive,
-                                            ]}
-                                        >
-                                            <Image source={icon} style={styles.icon} />
-                                        </View>
-                                        <View>
-                                            <Text style={styles.cardTitle}>{sensor.name}</Text>
-                                            <Text style={styles.cardLocation}>{sensor.location}</Text>
-                                        </View>
-                                    </View>
-                                    {isToggling ? (
-                                        <ActivityIndicator size="small" color="#2563eb" />
-                                    ) : (
-                                        <Switch
-                                            value={sensor.status === "active"}
-                                            onValueChange={() => toggleSensor(sensor)}
-                                        />
-                                    )}
-                                </View>
-
-                                <View style={styles.metaRow}>
-                                    <Text style={styles.metaLabel}>Status</Text>
-                                    <Text
-                                        style={[
-                                            styles.badge,
-                                            sensor.status === "active" ? styles.badgeActive : styles.badgeMuted,
-                                        ]}
-                                    >
-                                        {sensor.status === "active" ? "Active" : "Inactive"}
-                                    </Text>
-                                </View>
-
-                                {sensor.battery !== null ? (
-                                    <View style={styles.metaGroup}>
-                                        <View style={styles.metaRow}>
-                                            <Text style={styles.metaLabel}>Battery</Text>
-                                            <Text
-                                                style={[
-                                                    styles.metaValue,
-                                                    sensor.battery < 50 && styles.destructiveText,
-                                                ]}
-                                            >
-                                                {sensor.battery}%
-                                            </Text>
-                                        </View>
-                                        <View style={styles.progressTrack}>
-                                            <View
-                                                style={[
-                                                    styles.progressFill,
-                                                    { width: `${Math.min(sensor.battery, 100)}%` },
-                                                    sensor.battery < 50 && styles.progressLow,
-                                                ]}
-                                            />
-                                        </View>
-                                    </View>
-                                ) : (
-                                    <View style={styles.metaRow}>
-                                        <Text style={styles.metaLabel}>Power</Text>
-                                        <Text style={[styles.badge, styles.badgeOutline]}>AC Powered</Text>
-                                    </View>
-                                )}
-
-                                <View style={[styles.metaRow, styles.metaSpacing]}>
-                                    <Text style={styles.metaLabel}>Last update</Text>
-                                    <Text style={styles.metaValue}>{lastUpdateLabel}</Text>
-                                </View>
-                            </View>
-                        );
-                    })}
-                </View>
-            )}
-
-            {/* Summary row */}
-            {!loading && sensors.length > 0 && (
-                <View style={styles.summary}>
-                    <View style={styles.summaryCard}>
-                        <Text style={styles.summaryNumber}>{stats.active}</Text>
-                        <Text style={styles.summaryLabel}>Active</Text>
+                {/* ADVANCED SETTINGS PREVIEW */}
+                <TouchableOpacity style={styles.advancedSettingsItem}>
+                    <View style={styles.advancedLeft}>
+                        <MaterialCommunityIcons name="shield-sync" size={20} color="#A1A1AA" />
+                        <Text style={styles.advancedText}>Encrypted Key Management</Text>
                     </View>
-                    <View style={styles.summaryCard}>
-                        <Text style={styles.summaryNumber}>{stats.inactive}</Text>
-                        <Text style={styles.summaryLabel}>Inactive</Text>
-                    </View>
-                    <View style={styles.summaryCard}>
-                        <Text style={styles.summaryNumber}>{stats.lowBattery}</Text>
-                        <Text style={styles.summaryLabel}>Low Battery</Text>
-                    </View>
-                </View>
-            )}
-        </ScrollView>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color="#27272A" />
+                </TouchableOpacity>
+
+            </Animated.ScrollView>
+        </SafeAreaView>
     );
 }
 
-const localStyles = StyleSheet.create({
-    centerBox: {
-        alignItems: "center",
-        justifyContent: "center",
-        paddingVertical: 48,
-        gap: 10,
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: "#050505",
     },
-    loadingText: {
-        marginTop: 8,
-        color: "#6b7280",
-        fontSize: 14,
+    header: {
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 16,
     },
-    emptyTitle: {
-        fontSize: 17,
+    headerTitle: {
+        color: "#FAFAFA",
+        fontSize: 32,
+        fontWeight: "bold",
+    },
+    ghostContainer: {
+        height: 10,
+    },
+    scrollContent: {
+        paddingHorizontal: 20,
+        paddingBottom: 40,
+    },
+    sectionLabel: {
+        color: "#FAFAFA",
+        fontSize: 18,
         fontWeight: "600",
-        color: "#111827",
+        marginTop: 32,
+        marginBottom: 16,
     },
-    emptySubtitle: {
-        fontSize: 14,
-        color: "#6b7280",
+    mainCard: {
+        backgroundColor: "#09090B",
+        borderRadius: 28,
+        padding: 24,
+        borderWidth: 1,
+        borderColor: "#18181B",
+    },
+    mainCardUnlocked: {
+        borderColor: "#EF444440",
+    },
+    mainCardHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+    },
+    mainIconWrapper: {
+        width: 64,
+        height: 64,
+        borderRadius: 20,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    batteryBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#18181B",
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 6,
+    },
+    batteryText: {
+        color: "#A1A1AA",
+        fontSize: 12,
+        fontWeight: "bold",
+    },
+    mainCardBody: {
+        marginTop: 20,
+    },
+    mainCardTitle: {
+        color: "#FAFAFA",
+        fontSize: 24,
+        fontWeight: "bold",
+    },
+    mainCardStatus: {
+        color: "#71717A",
+        fontSize: 16,
+        marginTop: 4,
+    },
+    mainCardFooter: {
+        marginTop: 24,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: "#18181B",
+    },
+    tapHint: {
+        color: "#A1A1AA",
+        fontSize: 13,
         textAlign: "center",
-        paddingHorizontal: 24,
+        fontWeight: "500",
     },
-    retryButton: {
-        marginTop: 8,
-        paddingVertical: 10,
-        paddingHorizontal: 24,
-        borderRadius: 10,
-        backgroundColor: "#111827",
+    grid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        justifyContent: "space-between",
+        gap: 12,
     },
-    retryButtonText: {
-        color: "#fff",
-        fontWeight: "700",
-        fontSize: 14,
+    configCard: {
+        width: COLUMN_WIDTH,
+        backgroundColor: "#09090B",
+        borderRadius: 24,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: "#18181B",
+        minHeight: 140,
+        justifyContent: "space-between",
     },
-    errorBanner: {
+    configHeader: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        backgroundColor: "#fef2f2",
-        borderWidth: 1,
-        borderColor: "#fecaca",
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        marginBottom: 8,
     },
-    errorText: {
-        color: "#991b1b",
-        fontSize: 13,
-        flexShrink: 1,
-        marginRight: 12,
+    configTitle: {
+        color: "#FAFAFA",
+        fontSize: 15,
+        fontWeight: "bold",
+        marginTop: 12,
     },
-    retryText: {
-        color: "#2563eb",
-        fontWeight: "600",
-        fontSize: 13,
-    },
-});
-
-const authStyles = StyleSheet.create({
-    container: {
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-        rowGap: 12,
-    },
-    title: {
-        fontSize: 20,
-        fontWeight: "700",
-        color: "#111827",
-    },
-    subtitle: {
-        fontSize: 14,
-        color: "#6b7280",
-        textAlign: "center",
-    },
-    button: {
+    configDesc: {
+        color: "#71717A",
+        fontSize: 12,
         marginTop: 4,
-        paddingVertical: 12,
-        paddingHorizontal: 18,
-        borderRadius: 10,
-        backgroundColor: "#111827",
     },
-    buttonText: {
-        color: "#fff",
-        fontWeight: "700",
+    cardArrow: {
+        position: "absolute",
+        bottom: 16,
+        right: 16,
+    },
+    advancedSettingsItem: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        backgroundColor: "#09090B",
+        marginTop: 24,
+        padding: 16,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: "#18181B",
+    },
+    advancedLeft: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+    },
+    advancedText: {
+        color: "#A1A1AA",
+        fontSize: 14,
+        fontWeight: "500",
     },
 });
