@@ -118,14 +118,12 @@ export default function Settings() {
                                 onPress={() => router.push("/settings/manage-users")}
                             />
 
-                            {/* we can add this back when camera features are implemented
                             <SettingLink
                                 icon={<CircleIcon label="V" color="#f97316" />}
                                 title="Camera Settings"
                                 subtitle="Video quality & recording"
                                 onPress={() => router.push("/settings/camera-settings")}
                             />
-                            */}
 
                             <SettingLink
                                 icon={<CircleIcon label="W" color="#0ea5e9" />}

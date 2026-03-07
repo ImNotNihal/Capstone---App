@@ -24,7 +24,7 @@ export default function RootLayout() {
                                 <Stack.Screen name="events" />
                                 <Stack.Screen name="sensors" />
                                 <Stack.Screen name="settings" />
-                                <Stack.Screen name="(tabs)" />
+                                <Stack.Screen name="testing" />
                                 <Stack.Screen name="logs" />
                             </Stack>
                         </View>
