@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useRef, useState} from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
     View,
     Text,
@@ -9,48 +9,146 @@ import {
     ScrollView,
     Animated,
     StyleSheet,
+    ActivityIndicator,
 } from "react-native";
-import {AppContext} from "../../context/app-context";
-import {useContext} from "react";
-import {useRouter} from "expo-router";
-import {WebView} from "react-native-webview";
-import {useFocusEffect} from "@react-navigation/native";
-import {Platform} from 'react-native';
-import styles from './styles';
-import { Dimensions } from "react-native";
-const { width } = Dimensions.get("window");
+import { AppContext } from "../../context/app-context";
+import { useContext } from "react";
+import { useRouter } from "expo-router";
+import { WebView } from "react-native-webview";
+import { useFocusEffect } from "@react-navigation/native";
+import { Platform } from "react-native";
+import { API_BASE_URL } from "@/src/config";
 
+const EVENT_LABELS: Record<string, string> = {
+    LOCKED: "Door locked",
+    UNLOCKED: "Door unlocked",
+    MOTION_DETECTED: "Motion detected",
+    FACE_RECOGNIZED: "Face recognized",
+    FACE_UNKNOWN: "Unknown face detected",
+    FINGERPRINT_SUCCESS: "Fingerprint accepted",
+    FINGERPRINT_FAILED: "Fingerprint scan failed",
+    KEYPAD_SUCCESS: "Keypad code accepted",
+    KEYPAD_FAILED: "Incorrect keypad code",
+    DOOR_OPENED: "Door opened",
+    DOOR_CLOSED: "Door closed",
+    CAMERA_TRIGGERED: "Camera recording started",
+    AUTH_FAILED: "Failed authentication attempt",
+};
+
+const METHOD_LABELS: Record<string, string> = {
+    face: "Face Recognition",
+    fingerprint: "Fingerprint",
+    keypad: "Keypad PIN",
+    bluetooth: "Bluetooth",
+};
+
+function timeAgo(iso: string): string {
+    const diff = Date.now() - new Date(iso).getTime();
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return "Just now";
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return `${Math.floor(hours / 24)}d ago`;
+}
 
 export default function Home() {
-    const {user, deviceId, httpLock, httpUnlock, isLocked} = useContext(AppContext);
+    const { user, deviceId, httpLock, httpUnlock, isLocked, authToken } = useContext(AppContext);
     const router = useRouter();
-    // const [isLocked, setIsLocked] = useState(false);
     const [isCallActive, setIsCallActive] = useState(false);
-    const [lastActivities, setLastActivities] = useState([]); // placeholder if you later make this dynamic
 
-    const toggleLock = () => isLocked ? httpUnlock() : httpLock();
+    // Last activity
+    const [lastEvent, setLastEvent] = useState<{ type: string; timestamp: string } | null>(null);
+    const [loadingEvent, setLoadingEvent] = useState(true);
+
+    // Active access methods
+    const [activeMethods, setActiveMethods] = useState<string[]>([]);
+    const [loadingMethods, setLoadingMethods] = useState(true);
+
+    const toggleLock = () => (isLocked ? httpUnlock() : httpLock());
     const toggleCall = () => setIsCallActive((prev) => !prev);
 
-    useEffect(() => {
-        // console.log("User:", user);
-        // console.log("Device ID:", deviceId);
-    }, []);
+    const authHeaders = useCallback(() => {
+        const h: Record<string, string> = {};
+        if (authToken) h["Authorization"] = `Bearer ${authToken}`;
+        return h;
+    }, [authToken]);
+
+    const fetchLastActivity = useCallback(async () => {
+        if (!deviceId || !authToken) {
+            setLoadingEvent(false);
+            return;
+        }
+        setLoadingEvent(true);
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 8000);
+            const res = await fetch(`${API_BASE_URL}devices/${deviceId}/events?limit=1`, {
+                headers: authHeaders(),
+                signal: controller.signal,
+            });
+            clearTimeout(timer);
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            if (Array.isArray(data) && data.length > 0) {
+                setLastEvent({ type: data[0].type, timestamp: data[0].timestamp });
+            } else {
+                setLastEvent(null);
+            }
+        } catch {
+            setLastEvent(null);
+        } finally {
+            setLoadingEvent(false);
+        }
+    }, [deviceId, authToken, authHeaders]);
+
+    const fetchActiveMethods = useCallback(async () => {
+        if (!authToken) {
+            setLoadingMethods(false);
+            return;
+        }
+        setLoadingMethods(true);
+        try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 8000);
+            const res = await fetch(`${API_BASE_URL}credentials/me`, {
+                headers: authHeaders(),
+                signal: controller.signal,
+            });
+            clearTimeout(timer);
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            const methods = data.authMethods || {};
+            const active = Object.entries(methods)
+                .filter(([, v]: [string, any]) => v?.isActive)
+                .map(([k]) => k);
+            setActiveMethods(active);
+        } catch {
+            setActiveMethods([]);
+        } finally {
+            setLoadingMethods(false);
+        }
+    }, [authToken, authHeaders]);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchLastActivity();
+            fetchActiveMethods();
+        }, [fetchLastActivity, fetchActiveMethods])
+    );
 
     if (!user) {
         return (
             <View style={authStyles.container}>
                 <Text style={authStyles.title}>You are not logged in</Text>
                 <Text style={authStyles.subtitle}>Log in from Settings to use the app.</Text>
-                <TouchableOpacity
-                    onPress={() => router.push("/settings")}
-                    style={authStyles.button}
-                >
+                <TouchableOpacity onPress={() => router.push("/settings")} style={authStyles.button}>
                     <Text style={authStyles.buttonText}>Go to Settings</Text>
                 </TouchableOpacity>
             </View>
         );
     }
-    
+
     return (
         <ScrollView style={{ flex: 1, flexDirection: "column" }}>
             {/* Header */}
@@ -74,13 +172,8 @@ export default function Home() {
 
             {/* Quick Actions + Status Cards */}
             <View style={{ padding: 16, flex: 1 }}>
-                {/* Quick Actions (2-column grid) */}
-                <View
-                    style={{
-                        flexDirection: "row",
-                        marginBottom: 16,
-                    }}
-                >
+                {/* Quick Actions */}
+                <View style={{ flexDirection: "row", marginBottom: 16 }}>
                     <LockButton locked={isLocked} onLockCallback={toggleLock} />
                     <StartCallButton callActive={isCallActive} onStartCallCallback={toggleCall} />
                 </View>
@@ -88,145 +181,94 @@ export default function Home() {
                 {/* Status Cards */}
                 <View style={{ rowGap: 12 }}>
                     {/* Last Activity Card */}
-                    <View
-                        style={{
-                            padding: 16,
-                            borderRadius: 12,
-                            borderWidth: 1,
-                            borderColor: "#e5e7eb",
-                            backgroundColor: "white",
-                        }}
-                    >
-                        <View
-                            style={{
-                                flexDirection: "row",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                            }}
-                        >
-                            <View style={{ flexDirection: "row", alignItems: "center" }}>
-                                <View
-                                    style={{
-                                        backgroundColor: "rgba(59,130,246,0.12)",
-                                        padding: 8,
-                                        borderRadius: 12,
-                                        marginRight: 12,
-                                    }}
-                                >
-                                    {/* Bell Icon */}
-                                    <Image
-                                        source={require("../../assets/images/bell.png")}
-                                        style={{ width: 20, height: 20, tintColor: "#2563eb" }}
+                    <View style={cardStyle.card}>
+                        <View style={{ flexDirection: "row", alignItems: "center" }}>
+                            <View style={cardStyle.iconWrap}>
+                                <Image
+                                    source={require("../../assets/images/bell.png")}
+                                    style={{ width: 20, height: 20, tintColor: "#2563eb" }}
+                                />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={{ fontSize: 14, fontWeight: "500" }}>Last Activity</Text>
+                                {loadingEvent ? (
+                                    <ActivityIndicator
+                                        size="small"
+                                        color="#9ca3af"
+                                        style={{ alignSelf: "flex-start", marginTop: 4 }}
                                     />
-                                </View>
-                                <View>
-                                    <Text style={{ fontSize: 14 }}>Last Activity</Text>
+                                ) : lastEvent ? (
                                     <Text style={{ fontSize: 13, color: "#6b7280" }}>
-                                        Motion detected • 5 min ago
+                                        {EVENT_LABELS[lastEvent.type] ?? lastEvent.type}
+                                        {" • "}
+                                        {timeAgo(lastEvent.timestamp)}
                                     </Text>
-                                </View>
+                                ) : (
+                                    <Text style={{ fontSize: 13, color: "#9ca3af" }}>No recent activity</Text>
+                                )}
                             </View>
                         </View>
                     </View>
 
-                    {/* Quick Access Card */}
-                    <View
-                        style={{
-                            padding: 16,
-                            borderRadius: 12,
-                            borderWidth: 1,
-                            borderColor: "#e5e7eb",
-                            backgroundColor: "white",
-                        }}
-                    >
-                        <View
-                            style={{
-                                flexDirection: "row",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                marginBottom: 12,
-                            }}
-                        >
-                            <Text style={{ fontSize: 16, fontWeight: "600" }}>Quick Access</Text>
-                        </View>
+                    {/* Access Methods Card */}
+                    <View style={cardStyle.card}>
+                        <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 12 }}>
+                            Active Access Methods
+                        </Text>
 
-                        <View style={{ rowGap: 8 }}>
-                            {/* John Doe row */}
-                            <View
-                                style={{
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                    padding: 8,
-                                    borderRadius: 10,
-                                    backgroundColor: "#f4f4f5",
-                                }}
-                            >
-                                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        {loadingMethods ? (
+                            <View style={{ alignItems: "center", paddingVertical: 12 }}>
+                                <ActivityIndicator size="small" color="#2563eb" />
+                                <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 6 }}>
+                                    Loading methods...
+                                </Text>
+                            </View>
+                        ) : activeMethods.length === 0 ? (
+                            <View style={{ alignItems: "center", paddingVertical: 12 }}>
+                                <Text style={{ fontSize: 14, color: "#6b7280" }}>No access methods enabled</Text>
+                                <Text style={{ fontSize: 12, color: "#9ca3af", marginTop: 4 }}>
+                                    Configure in Settings → Manage Users
+                                </Text>
+                            </View>
+                        ) : (
+                            <View style={{ rowGap: 8 }}>
+                                {activeMethods.map((method) => (
                                     <View
+                                        key={method}
                                         style={{
-                                            width: 32,
-                                            height: 32,
-                                            borderRadius: 16,
-                                            backgroundColor: "#2563eb",
-                                            justifyContent: "center",
+                                            flexDirection: "row",
                                             alignItems: "center",
-                                            marginRight: 8,
+                                            justifyContent: "space-between",
+                                            padding: 8,
+                                            borderRadius: 10,
+                                            backgroundColor: "#f4f4f5",
                                         }}
                                     >
-                                        <Text
-                                            style={{
-                                                color: "white",
-                                                fontWeight: "600",
-                                                fontSize: 12,
-                                            }}
-                                        >
-                                            JD
-                                        </Text>
+                                        <View style={{ flexDirection: "row", alignItems: "center" }}>
+                                            <View
+                                                style={{
+                                                    width: 32,
+                                                    height: 32,
+                                                    borderRadius: 16,
+                                                    backgroundColor: "#2563eb",
+                                                    justifyContent: "center",
+                                                    alignItems: "center",
+                                                    marginRight: 8,
+                                                }}
+                                            >
+                                                <Text style={{ color: "white", fontWeight: "600", fontSize: 11 }}>
+                                                    {method[0].toUpperCase()}
+                                                </Text>
+                                            </View>
+                                            <Text style={{ fontSize: 14 }}>
+                                                {METHOD_LABELS[method] ?? method}
+                                            </Text>
+                                        </View>
+                                        <BadgeOutline>Active</BadgeOutline>
                                     </View>
-                                    <Text>John Doe (Face ID)</Text>
-                                </View>
-                                <BadgeOutline>Active</BadgeOutline>
+                                ))}
                             </View>
-
-                            {/* Sarah Miller row */}
-                            <View
-                                style={{
-                                    flexDirection: "row",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                    padding: 8,
-                                    borderRadius: 10,
-                                    backgroundColor: "#f4f4f5",
-                                }}
-                            >
-                                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                                    <View
-                                        style={{
-                                            width: 32,
-                                            height: 32,
-                                            borderRadius: 16,
-                                            backgroundColor: "#e5e7eb",
-                                            justifyContent: "center",
-                                            alignItems: "center",
-                                            marginRight: 8,
-                                        }}
-                                    >
-                                        <Text
-                                            style={{
-                                                color: "#111827",
-                                                fontWeight: "600",
-                                                fontSize: 12,
-                                            }}
-                                        >
-                                            SM
-                                        </Text>
-                                    </View>
-                                    <Text>Sarah Miller (Bluetooth)</Text>
-                                </View>
-                                <BadgeOutline>Active</BadgeOutline>
-                            </View>
-                        </View>
+                        )}
                     </View>
                 </View>
             </View>
@@ -234,20 +276,34 @@ export default function Home() {
     );
 }
 
-/* Camera Feed with overlays */
+const cardStyle = StyleSheet.create({
+    card: {
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#e5e7eb",
+        backgroundColor: "white",
+    },
+    iconWrap: {
+        backgroundColor: "rgba(59,130,246,0.12)",
+        padding: 8,
+        borderRadius: 12,
+        marginRight: 12,
+    },
+});
+
+/* Camera Feed */
 const CameraFeed = ({ isCallActive }: { isCallActive: boolean }) => {
     const { width } = useWindowDimensions();
     const isLargeScreen = width > 800;
-    const {cameraBaseUrl, isWebBrowser, authToken} = useContext(AppContext);
+    const { cameraBaseUrl, isWebBrowser, authToken } = useContext(AppContext);
     const [source, setSource] = useState("");
     const [webViewKey, setWebViewKey] = useState(0);
     const upscale = 2;
-    
+
     useFocusEffect(
         useCallback(() => {
-            // Force WebView to refresh its connection every time the screen gains focus.
             if (cameraBaseUrl) {
-                console.log("Setting camera source to:", cameraBaseUrl);
                 setSource(`${cameraBaseUrl}/stream?ts=${Date.now()}`);
                 setWebViewKey((prev) => prev + 1);
             }
@@ -257,9 +313,6 @@ const CameraFeed = ({ isCallActive }: { isCallActive: boolean }) => {
         }, [cameraBaseUrl])
     );
 
-    const height = (width * 9) / 16;
-    
-    
     return (
         <View style={{ backgroundColor: "black" }}>
             <View
@@ -275,7 +328,7 @@ const CameraFeed = ({ isCallActive }: { isCallActive: boolean }) => {
             >
                 <View style={{ width: "100%", flex: 3, aspectRatio: 16 / 9, overflow: "hidden" }}>
                     {source ? (
-                        isWebBrowser ?
+                        isWebBrowser ? (
                             <img
                                 src={source}
                                 style={{
@@ -286,25 +339,28 @@ const CameraFeed = ({ isCallActive }: { isCallActive: boolean }) => {
                                     transformOrigin: "center",
                                     imageRendering: "pixelated",
                                 }}
-                                // sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                             alt={"camera feed"}/>
-                            :
+                                alt={"camera feed"}
+                            />
+                        ) : (
                             <WebView
                                 key={webViewKey}
                                 source={{
                                     uri: source,
-                                    headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+                                    headers: authToken
+                                        ? { Authorization: `Bearer ${authToken}` }
+                                        : undefined,
                                 }}
                                 scalesPageToFit={true}
-                                style={{flex: 1, transform: [{ scale: upscale }]}}
+                                style={{ flex: 1, transform: [{ scale: upscale }] }}
                                 javaScriptEnabled
                                 domStorageEnabled
                             />
+                        )
                     ) : (
                         <ImageBackground
                             source={require("../../assets/images/camera-feed-test.png")}
-                            style={{flex: 1}}
-                            imageStyle={{resizeMode: "cover"}}
+                            style={{ flex: 1 }}
+                            imageStyle={{ resizeMode: "cover" }}
                         />
                     )}
                 </View>
@@ -313,42 +369,19 @@ const CameraFeed = ({ isCallActive }: { isCallActive: boolean }) => {
     );
 };
 
-/* Overlay circular icon button (camera / video) */
-const OverlayIconButton = ({ icon }: { icon: any }) => {
-    return (
-        <TouchableOpacity
-            style={{
-                backgroundColor: "rgba(0,0,0,0.6)",
-                padding: 8,
-                borderRadius: 999,
-                justifyContent: "center",
-                alignItems: "center",
-            }}
-        >
-            <Image
-                source={icon}
-                style={{ width: 16, height: 16, tintColor: "white" }}
-            />
-        </TouchableOpacity>
-    );
-};
-
 /* Quick Actions */
-
 const StartCallButton = ({
-                             callActive,
-                             onStartCallCallback,
-                         }: {
+    callActive,
+    onStartCallCallback,
+}: {
     callActive: boolean;
     onStartCallCallback: () => void;
 }) => {
     const micIcon = require("../../assets/images/mic.png");
     const phoneIcon = require("../../assets/images/phone.png");
-
     const backgroundColor = callActive ? "#ef4444" : "transparent";
     const borderColor = callActive ? "#ef4444" : "#d4d4d8";
     const textColor = callActive ? "white" : "#111827";
-
     return (
         <TouchableOpacity
             onPress={onStartCallCallback}
@@ -376,23 +409,12 @@ const StartCallButton = ({
     );
 };
 
-const LockButton = ({
-                        locked,
-                        onLockCallback,
-                    }: {
-    locked: boolean;
-    onLockCallback: () => void;
-}) => {
+const LockButton = ({ locked, onLockCallback }: { locked: boolean; onLockCallback: () => void }) => {
     const lockedIcon = require("../../assets/images/lock.png");
     const unlockedIcon = require("../../assets/images/lock-open.png");
-
-    // In the web version:
-    // - when locked: variant="default" (primary), show Unlock icon, text "Unlock Door"
-    // - when unlocked: variant="destructive", show Lock icon, text "Lock Door"
     const backgroundColor = locked ? "#111827" : "#ef4444";
     const text = locked ? "Unlock Door" : "Lock Door";
     const icon = locked ? unlockedIcon : lockedIcon;
-
     return (
         <TouchableOpacity
             onPress={onLockCallback}
@@ -407,24 +429,18 @@ const LockButton = ({
                 flexDirection: "column",
             }}
         >
-            <Image
-                source={icon}
-                style={{ width: 24, height: 24, marginBottom: 6, tintColor: "white" }}
-            />
+            <Image source={icon} style={{ width: 24, height: 24, marginBottom: 6, tintColor: "white" }} />
             <Text style={{ color: "white", fontWeight: "600", fontSize: 14 }}>{text}</Text>
         </TouchableOpacity>
     );
 };
 
-/* Locked status badge (top-right in header) */
 const LockedStatus = ({ locked }: { locked: boolean }) => {
     const lockedIcon = require("../../assets/images/lock.png");
     const unlockedIcon = require("../../assets/images/lock-open.png");
-
     const bgColor = locked ? "#ef4444" : "#e5e7eb";
     const textColor = locked ? "white" : "#111827";
     const iconTint = locked ? "white" : "#111827";
-
     return (
         <View
             style={{
@@ -438,12 +454,7 @@ const LockedStatus = ({ locked }: { locked: boolean }) => {
         >
             <Image
                 source={locked ? lockedIcon : unlockedIcon}
-                style={{
-                    width: 14,
-                    height: 14,
-                    marginRight: 4,
-                    tintColor: iconTint,
-                }}
+                style={{ width: 14, height: 14, marginRight: 4, tintColor: iconTint }}
             />
             <Text style={{ color: textColor, fontWeight: "600", fontSize: 12 }}>
                 {locked ? "Locked" : "Unlocked"}
@@ -452,72 +463,19 @@ const LockedStatus = ({ locked }: { locked: boolean }) => {
     );
 };
 
-/* LIVE badge (top-left in camera) */
-const LiveBadge = () => {
-    const pulse = useRef(new Animated.Value(1)).current;
-
-    useEffect(() => {
-        Animated.loop(
-            Animated.sequence([
-                Animated.timing(pulse, {
-                    toValue: 0.3,
-                    duration: 600,
-                    useNativeDriver: true,
-                }),
-                Animated.timing(pulse, {
-                    toValue: 1,
-                    duration: 600,
-                    useNativeDriver: true,
-                }),
-            ])
-        ).start();
-    }, [pulse]);
-
-    return (
-        <View
-            style={{
-                position: "absolute",
-                top: 12,
-                left: 12,
-                backgroundColor: "#ef4444", // destructive
-                paddingHorizontal: 8,
-                paddingVertical: 4,
-                borderRadius: 6,
-                flexDirection: "row",
-                alignItems: "center",
-            }}
-        >
-            <Animated.View
-                style={{
-                    width: 8,
-                    height: 8,
-                    backgroundColor: "white",
-                    borderRadius: 999,
-                    marginRight: 4,
-                    opacity: pulse,
-                }}
-            />
-            <Text style={{ color: "white", fontSize: 12, fontWeight: "600" }}>LIVE</Text>
-        </View>
-    );
-};
-
-/* Outline badge for "Active" labels */
-const BadgeOutline = ({ children }: { children: React.ReactNode }) => {
-    return (
-        <View
-            style={{
-                borderWidth: 1,
-                borderColor: "#d4d4d8",
-                borderRadius: 999,
-                paddingHorizontal: 8,
-                paddingVertical: 2,
-            }}
-        >
-            <Text style={{ fontSize: 12, color: "#111827" }}>{children}</Text>
-        </View>
-    );
-};
+const BadgeOutline = ({ children }: { children: React.ReactNode }) => (
+    <View
+        style={{
+            borderWidth: 1,
+            borderColor: "#d4d4d8",
+            borderRadius: 999,
+            paddingHorizontal: 8,
+            paddingVertical: 2,
+        }}
+    >
+        <Text style={{ fontSize: 12, color: "#111827" }}>{children}</Text>
+    </View>
+);
 
 const authStyles = StyleSheet.create({
     container: {
