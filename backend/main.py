@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 # Routers
-from routers import auth, credentials, devices, events, media, sensors, settings
+from routers import auth, credentials, devices, events, media, sensors, settings, profiles
 
 # WebSocket handlers
 from ws.device_ws import device_ws_endpoint
@@ -79,6 +79,7 @@ app.include_router(settings.router)
 app.include_router(credentials.router)
 app.include_router(sensors.router)
 app.include_router(media.router)
+app.include_router(profiles.router)
 
 # ─── WebSocket endpoints ─────────────────────────────────────────────────────
 

@@ -1,371 +1,336 @@
-import React, { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { API_BASE_URL } from "@/src/config";
+import { AppContext } from "@/src/context/app-context";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
-    ActivityIndicator,
-    Image,
-    ScrollView,
+    Animated,
+    Dimensions,
+    SafeAreaView,
+    StatusBar,
     StyleSheet,
     Switch,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from "react-native";
-import styles from "./styles";
-import { AppContext } from "../../context/app-context";
-import { API_BASE_URL } from "@/src/config";
-import { useRouter } from "expo-router";
 
-type SensorType = "Lock" | "Motion" | "Camera" | "Contact";
-
-type Sensor = {
-    id: string;
-    name: string;
-    type: SensorType;
-    status: "active" | "inactive";
-    battery: number | null;
-    location: string;
-    lastUpdate: string;
-};
-
-const TYPE_ICONS: Record<SensorType, any> = {
-    Lock: require("../../assets/images/lock.png"),
-    Motion: require("../../assets/images/radar.png"),
-    Camera: require("../../assets/images/camera.png"),
-    Contact: require("../../assets/images/lock-open.png"),
-};
-
-const FETCH_TIMEOUT = 8000;
-
-function timeAgo(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime();
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return "Just now";
-    if (minutes < 60) return `${minutes} min ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
-}
+const { width } = Dimensions.get("window");
+const COLUMN_WIDTH = (width - 52) / 2;
 
 export default function Sensors() {
-    const { user, authToken, deviceId } = useContext(AppContext);
     const router = useRouter();
-    const [sensors, setSensors] = useState<Sensor[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [togglingId, setTogglingId] = useState<string | null>(null);
+    const { isLocked, httpLock, httpUnlock, authToken, deviceId } = useContext(AppContext);
+    const [motionEnabled, setMotionEnabled] = useState(true);
+    const [loadingMotion, setLoadingMotion] = useState(false);
 
-    const headers = useCallback(() => {
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 500,
+            useNativeDriver: true,
+        }).start();
+    }, []);
+
+    const authHeaders = useCallback(() => {
         const h: Record<string, string> = { "Content-Type": "application/json" };
         if (authToken) h["Authorization"] = `Bearer ${authToken}`;
         return h;
     }, [authToken]);
 
-    const fetchSensors = useCallback(async () => {
-        if (!deviceId || !authToken) {
-            setLoading(false);
-            return;
-        }
-        setLoading(true);
-        setError(null);
+    const fetchSettings = useCallback(async () => {
+        if (!authToken || !deviceId) return;
         try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-            const res = await fetch(`${API_BASE_URL}devices/${deviceId}/sensors`, {
-                headers: headers(),
-                signal: controller.signal,
+            const res = await fetch(`${API_BASE_URL}settings/${deviceId}`, {
+                headers: authHeaders(),
             });
-            clearTimeout(timer);
-            if (!res.ok) throw new Error("Failed to load sensors");
-            const data: Sensor[] = await res.json();
-            setSensors(data);
-        } catch (e: any) {
-            setError(e.name === "AbortError" ? "Server unreachable" : (e.message || "Failed to load"));
-        } finally {
-            setLoading(false);
-        }
-    }, [authToken, deviceId, headers]);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (typeof data.cameraEnabled === "boolean") {
+                setMotionEnabled(data.cameraEnabled);
+            }
+        } catch {}
+    }, [authToken, deviceId, authHeaders]);
 
-    useEffect(() => {
-        fetchSensors();
-    }, [fetchSensors]);
+    useFocusEffect(
+        useCallback(() => {
+            fetchSettings();
+        }, [fetchSettings])
+    );
 
-    const toggleSensor = async (sensor: Sensor) => {
-        const next = sensor.status === "active" ? "inactive" : "active";
-        const prev = sensor.status;
-        setSensors((s) => s.map((x) => (x.id === sensor.id ? { ...x, status: next } : x)));
-        setTogglingId(sensor.id);
-        try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-            const res = await fetch(`${API_BASE_URL}devices/${deviceId}/sensors/${sensor.id}`, {
-                method: "PATCH",
-                headers: headers(),
-                body: JSON.stringify({ status: next }),
-                signal: controller.signal,
-            });
-            clearTimeout(timer);
-            if (!res.ok) throw new Error("Failed to update sensor");
-            const updated: Sensor = await res.json();
-            setSensors((s) => s.map((x) => (x.id === sensor.id ? updated : x)));
-        } catch (e: any) {
-            setSensors((s) => s.map((x) => (x.id === sensor.id ? { ...x, status: prev } : x)));
-            setError(e.message || "Failed to update sensor");
-        } finally {
-            setTogglingId(null);
+    const handleLockToggle = () => {
+        if (isLocked) {
+            httpUnlock();
+        } else {
+            httpLock();
         }
     };
 
-    const stats = useMemo(() => {
-        const active = sensors.filter((s) => s.status === "active").length;
-        const inactive = sensors.length - active;
-        const lowBattery = sensors.filter((s) => typeof s.battery === "number" && s.battery < 50).length;
-        return { active, inactive, lowBattery, total: sensors.length };
-    }, [sensors]);
-
-    if (!user) {
-        return (
-            <View style={[styles.screen, authStyles.container]}>
-                <Text style={authStyles.title}>You are not logged in</Text>
-                <Text style={authStyles.subtitle}>Log in from Settings to use the app.</Text>
-                <TouchableOpacity onPress={() => router.push("/settings")} style={authStyles.button}>
-                    <Text style={authStyles.buttonText}>Go to Settings</Text>
-                </TouchableOpacity>
-            </View>
-        );
-    }
+    const handleMotionToggle = async (val: boolean) => {
+        setMotionEnabled(val);
+        setLoadingMotion(true);
+        try {
+            await fetch(`${API_BASE_URL}settings/${deviceId}`, {
+                method: "PUT",
+                headers: authHeaders(),
+                body: JSON.stringify({ cameraEnabled: val }),
+            });
+        } catch {
+            setMotionEnabled(!val);
+        } finally {
+            setLoadingMotion(false);
+        }
+    };
 
     return (
-        <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
+        <SafeAreaView style={styles.container}>
+            <StatusBar barStyle="light-content" />
+
             <View style={styles.header}>
-                <Text style={styles.title}>Sensors & Devices</Text>
-                <Text style={styles.subtitle}>
-                    {loading ? "Loading..." : `${stats.active} of ${stats.total} sensors active`}
-                </Text>
+                <Text style={styles.headerTitle}>Access Control</Text>
             </View>
 
-            {/* Error banner */}
-            {error && !loading && (
-                <View style={localStyles.errorBanner}>
-                    <Text style={localStyles.errorText}>{error}</Text>
-                    <TouchableOpacity onPress={fetchSensors}>
-                        <Text style={localStyles.retryText}>Retry</Text>
+            <View style={styles.ghostContainer} />
+
+            <Animated.ScrollView
+                style={{ opacity: fadeAnim }}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* PRIMARY STATUS: FRONT DOOR */}
+                <TouchableOpacity
+                    style={[styles.mainCard, !isLocked && styles.mainCardUnlocked]}
+                    onPress={handleLockToggle}
+                    activeOpacity={0.9}
+                >
+                    <View style={styles.mainCardHeader}>
+                        <View style={[styles.mainIconWrapper, { backgroundColor: isLocked ? "#10B98120" : "#EF444420" }]}>
+                            <MaterialCommunityIcons
+                                name={isLocked ? "lock" : "lock-open"}
+                                size={32}
+                                color={isLocked ? "#10B981" : "#EF4444"}
+                            />
+                        </View>
+                        <View style={styles.batteryBadge}>
+                            <MaterialCommunityIcons name="battery" size={14} color="#71717A" />
+                            <Text style={styles.batteryText}>92%</Text>
+                        </View>
+                    </View>
+                    <View style={styles.mainCardBody}>
+                        <Text style={styles.mainCardTitle}>Front Door</Text>
+                        <Text style={styles.mainCardStatus}>
+                            Current State: <Text style={{ color: isLocked ? "#10B981" : "#EF4444" }}>{isLocked ? "Locked" : "Unlocked"}</Text>
+                        </Text>
+                    </View>
+                    <View style={styles.mainCardFooter}>
+                        <Text style={styles.tapHint}>Tap to {isLocked ? "Unlock" : "Lock"}</Text>
+                    </View>
+                </TouchableOpacity>
+
+                <Text style={styles.sectionLabel}>Configuration</Text>
+
+                <View style={styles.grid}>
+                    {/* Motion Detection */}
+                    <TouchableOpacity
+                        style={styles.configCard}
+                        onPress={() => router.push("/sensors/motion-settings")}
+                        activeOpacity={0.7}
+                    >
+                        <View style={styles.configHeader}>
+                            <MaterialCommunityIcons name="run-fast" size={24} color="#8B5CF6" />
+                            <Switch
+                                value={motionEnabled}
+                                onValueChange={handleMotionToggle}
+                                disabled={loadingMotion}
+                                trackColor={{ false: "#27272A", true: "#8B5CF650" }}
+                                thumbColor={motionEnabled ? "#8B5CF6" : "#71717A"}
+                            />
+                        </View>
+                        <View>
+                            <Text style={styles.configTitle}>Motion</Text>
+                            <Text style={styles.configDesc}>Setup zones</Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
+                    </TouchableOpacity>
+
+                    {/* PIN Configuration */}
+                    <TouchableOpacity
+                        style={styles.configCard}
+                        activeOpacity={0.7}
+                        onPress={() => router.push("/sensors/pin-settings")}
+                    >
+                        <MaterialCommunityIcons name="dialpad" size={24} color="#F59E0B" />
+                        <View>
+                            <Text style={styles.configTitle}>PIN Codes</Text>
+                            <Text style={styles.configDesc}>Access keys</Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
+                    </TouchableOpacity>
+
+                    {/* Facial Recognition */}
+                    <TouchableOpacity
+                        style={styles.configCard}
+                        activeOpacity={0.7}
+                        onPress={() => router.push("/sensors/facial-settings")}
+                    >
+                        <MaterialCommunityIcons name="face-recognition" size={24} color="#3B82F6" />
+                        <View>
+                            <Text style={styles.configTitle}>Face ID</Text>
+                            <Text style={styles.configDesc}>Profiles</Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
+                    </TouchableOpacity>
+
+                    {/* Fingerprint Configuration */}
+                    <TouchableOpacity
+                        style={styles.configCard}
+                        activeOpacity={0.7}
+                        onPress={() => router.push("/sensors/biometric-settings")}
+                    >
+                        <MaterialCommunityIcons name="fingerprint" size={24} color="#10B981" />
+                        <View>
+                            <Text style={styles.configTitle}>Biometrics</Text>
+                            <Text style={styles.configDesc}>Scanner</Text>
+                        </View>
+                        <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
                     </TouchableOpacity>
                 </View>
-            )}
 
-            {/* Loading state */}
-            {loading ? (
-                <View style={localStyles.centerBox}>
-                    <ActivityIndicator size="large" color="#2563eb" />
-                    <Text style={localStyles.loadingText}>Loading sensors...</Text>
-                </View>
-            ) : !error && sensors.length === 0 ? (
-                /* Empty state */
-                <View style={localStyles.centerBox}>
-                    <Text style={localStyles.emptyTitle}>No sensors found</Text>
-                    <Text style={localStyles.emptySubtitle}>No sensors are registered for this device.</Text>
-                    <TouchableOpacity onPress={fetchSensors} style={localStyles.retryButton}>
-                        <Text style={localStyles.retryButtonText}>Refresh</Text>
-                    </TouchableOpacity>
-                </View>
-            ) : (
-                /* Sensor list */
-                <View style={styles.list}>
-                    {sensors.map((sensor) => {
-                        const icon = TYPE_ICONS[sensor.type] ?? TYPE_ICONS.Contact;
-                        const isToggling = togglingId === sensor.id;
-                        const lastUpdateLabel =
-                            sensor.type === "Camera" && sensor.status === "active"
-                                ? "Live"
-                                : timeAgo(sensor.lastUpdate);
-
-                        return (
-                            <View key={sensor.id} style={styles.card}>
-                                <View style={styles.cardTop}>
-                                    <View style={styles.iconTitle}>
-                                        <View
-                                            style={[
-                                                styles.iconBadge,
-                                                sensor.status === "active"
-                                                    ? styles.iconBadgeActive
-                                                    : styles.iconBadgeInactive,
-                                            ]}
-                                        >
-                                            <Image source={icon} style={styles.icon} />
-                                        </View>
-                                        <View>
-                                            <Text style={styles.cardTitle}>{sensor.name}</Text>
-                                            <Text style={styles.cardLocation}>{sensor.location}</Text>
-                                        </View>
-                                    </View>
-                                    {isToggling ? (
-                                        <ActivityIndicator size="small" color="#2563eb" />
-                                    ) : (
-                                        <Switch
-                                            value={sensor.status === "active"}
-                                            onValueChange={() => toggleSensor(sensor)}
-                                        />
-                                    )}
-                                </View>
-
-                                <View style={styles.metaRow}>
-                                    <Text style={styles.metaLabel}>Status</Text>
-                                    <Text
-                                        style={[
-                                            styles.badge,
-                                            sensor.status === "active" ? styles.badgeActive : styles.badgeMuted,
-                                        ]}
-                                    >
-                                        {sensor.status === "active" ? "Active" : "Inactive"}
-                                    </Text>
-                                </View>
-
-                                {sensor.battery !== null ? (
-                                    <View style={styles.metaGroup}>
-                                        <View style={styles.metaRow}>
-                                            <Text style={styles.metaLabel}>Battery</Text>
-                                            <Text
-                                                style={[
-                                                    styles.metaValue,
-                                                    sensor.battery < 50 && styles.destructiveText,
-                                                ]}
-                                            >
-                                                {sensor.battery}%
-                                            </Text>
-                                        </View>
-                                        <View style={styles.progressTrack}>
-                                            <View
-                                                style={[
-                                                    styles.progressFill,
-                                                    { width: `${Math.min(sensor.battery, 100)}%` },
-                                                    sensor.battery < 50 && styles.progressLow,
-                                                ]}
-                                            />
-                                        </View>
-                                    </View>
-                                ) : (
-                                    <View style={styles.metaRow}>
-                                        <Text style={styles.metaLabel}>Power</Text>
-                                        <Text style={[styles.badge, styles.badgeOutline]}>AC Powered</Text>
-                                    </View>
-                                )}
-
-                                <View style={[styles.metaRow, styles.metaSpacing]}>
-                                    <Text style={styles.metaLabel}>Last update</Text>
-                                    <Text style={styles.metaValue}>{lastUpdateLabel}</Text>
-                                </View>
-                            </View>
-                        );
-                    })}
-                </View>
-            )}
-
-            {/* Summary row */}
-            {!loading && sensors.length > 0 && (
-                <View style={styles.summary}>
-                    <View style={styles.summaryCard}>
-                        <Text style={styles.summaryNumber}>{stats.active}</Text>
-                        <Text style={styles.summaryLabel}>Active</Text>
-                    </View>
-                    <View style={styles.summaryCard}>
-                        <Text style={styles.summaryNumber}>{stats.inactive}</Text>
-                        <Text style={styles.summaryLabel}>Inactive</Text>
-                    </View>
-                    <View style={styles.summaryCard}>
-                        <Text style={styles.summaryNumber}>{stats.lowBattery}</Text>
-                        <Text style={styles.summaryLabel}>Low Battery</Text>
-                    </View>
-                </View>
-            )}
-        </ScrollView>
+            </Animated.ScrollView>
+        </SafeAreaView>
     );
 }
 
-const localStyles = StyleSheet.create({
-    centerBox: {
-        alignItems: "center",
-        justifyContent: "center",
-        paddingVertical: 48,
-        gap: 10,
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: "#050505",
     },
-    loadingText: {
-        marginTop: 8,
-        color: "#6b7280",
-        fontSize: 14,
+    header: {
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 16,
     },
-    emptyTitle: {
-        fontSize: 17,
-        fontWeight: "600",
-        color: "#111827",
-    },
-    emptySubtitle: {
-        fontSize: 14,
-        color: "#6b7280",
-        textAlign: "center",
-        paddingHorizontal: 24,
-    },
-    retryButton: {
-        marginTop: 8,
-        paddingVertical: 10,
-        paddingHorizontal: 24,
-        borderRadius: 10,
-        backgroundColor: "#111827",
-    },
-    retryButtonText: {
-        color: "#fff",
+    headerTitle: {
+        color: "#FAFAFA",
+        fontSize: 28,
         fontWeight: "700",
-        fontSize: 14,
     },
-    errorBanner: {
+    ghostContainer: {
+        height: 10,
+    },
+    scrollContent: {
+        paddingHorizontal: 20,
+        paddingBottom: 40,
+    },
+    sectionLabel: {
+        color: "#71717A",
+        fontSize: 12,
+        fontWeight: "600",
+        textTransform: "uppercase",
+        letterSpacing: 1,
+        marginTop: 32,
+        marginBottom: 16,
+    },
+    mainCard: {
+        backgroundColor: "#09090B",
+        borderRadius: 28,
+        padding: 24,
+        borderWidth: 1,
+        borderColor: "#18181B",
+    },
+    mainCardUnlocked: {
+        borderColor: "#EF444440",
+    },
+    mainCardHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+    },
+    mainIconWrapper: {
+        width: 64,
+        height: 64,
+        borderRadius: 20,
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    batteryBadge: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#18181B",
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 6,
+    },
+    batteryText: {
+        color: "#A1A1AA",
+        fontSize: 12,
+        fontWeight: "600",
+    },
+    mainCardBody: {
+        marginTop: 20,
+    },
+    mainCardTitle: {
+        color: "#FAFAFA",
+        fontSize: 22,
+        fontWeight: "700",
+    },
+    mainCardStatus: {
+        color: "#71717A",
+        fontSize: 15,
+        marginTop: 4,
+    },
+    mainCardFooter: {
+        marginTop: 24,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: "#18181B",
+    },
+    tapHint: {
+        color: "#A1A1AA",
+        fontSize: 13,
+        textAlign: "center",
+        fontWeight: "500",
+    },
+    grid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        justifyContent: "space-between",
+        gap: 12,
+    },
+    configCard: {
+        width: COLUMN_WIDTH,
+        backgroundColor: "#09090B",
+        borderRadius: 24,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: "#18181B",
+        minHeight: 140,
+        justifyContent: "space-between",
+    },
+    configHeader: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
-        backgroundColor: "#fef2f2",
-        borderWidth: 1,
-        borderColor: "#fecaca",
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        marginBottom: 8,
     },
-    errorText: {
-        color: "#991b1b",
-        fontSize: 13,
-        flexShrink: 1,
-        marginRight: 12,
-    },
-    retryText: {
-        color: "#2563eb",
+    configTitle: {
+        color: "#FAFAFA",
+        fontSize: 15,
         fontWeight: "600",
-        fontSize: 13,
+        marginTop: 12,
     },
-});
-
-const authStyles = StyleSheet.create({
-    container: {
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 24,
-        rowGap: 12,
-    },
-    title: {
-        fontSize: 20,
-        fontWeight: "700",
-        color: "#111827",
-    },
-    subtitle: {
-        fontSize: 14,
-        color: "#6b7280",
-        textAlign: "center",
-    },
-    button: {
+    configDesc: {
+        color: "#71717A",
+        fontSize: 12,
         marginTop: 4,
-        paddingVertical: 12,
-        paddingHorizontal: 18,
-        borderRadius: 10,
-        backgroundColor: "#111827",
     },
-    buttonText: {
-        color: "#fff",
-        fontWeight: "700",
+    cardArrow: {
+        position: "absolute",
+        bottom: 16,
+        right: 16,
     },
 });

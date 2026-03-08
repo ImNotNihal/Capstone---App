@@ -1,72 +1,126 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-    View,
-    Text,
-    Image,
-    TouchableOpacity,
-    ImageBackground,
-    useWindowDimensions,
-    ScrollView,
-    Animated,
-    StyleSheet,
-    ActivityIndicator,
-} from "react-native";
-import { AppContext } from "../../context/app-context";
-import { useContext } from "react";
-import { useRouter } from "expo-router";
-import { WebView } from "react-native-webview";
-import { useFocusEffect } from "@react-navigation/native";
-import { Platform } from "react-native";
 import { API_BASE_URL } from "@/src/config";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
+import {
+    Animated,
+    Easing,
+    SafeAreaView,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from "react-native";
+import { WebView } from "react-native-webview";
+import { AppContext } from "../../context/app-context";
+import SigninForm from "../settings/signInForm";
 
+// --- Constants & Helpers ---
 const EVENT_LABELS: Record<string, string> = {
     LOCKED: "Door locked",
     UNLOCKED: "Door unlocked",
-    MOTION_DETECTED: "Motion detected",
-    FACE_RECOGNIZED: "Face recognized",
-    FACE_UNKNOWN: "Unknown face detected",
-    FINGERPRINT_SUCCESS: "Fingerprint accepted",
-    FINGERPRINT_FAILED: "Fingerprint scan failed",
-    KEYPAD_SUCCESS: "Keypad code accepted",
-    KEYPAD_FAILED: "Incorrect keypad code",
+    MOTION_DETECTED: "Motion detected at front door",
+    FACE_RECOGNIZED: "Familiar face recognized",
+    FACE_UNKNOWN: "Unrecognized person detected",
+    FINGERPRINT_SUCCESS: "Unlocked via fingerprint",
+    FINGERPRINT_FAILED: "Fingerprint not recognized",
+    KEYPAD_SUCCESS: "Unlocked via keypad",
+    KEYPAD_FAILED: "Incorrect PIN entered",
     DOOR_OPENED: "Door opened",
     DOOR_CLOSED: "Door closed",
-    CAMERA_TRIGGERED: "Camera recording started",
-    AUTH_FAILED: "Failed authentication attempt",
+    CAMERA_TRIGGERED: "Recording started",
+    AUTH_FAILED: "Failed login attempt",
+};
+
+const EVENT_ICONS: Record<string, any> = {
+    LOCKED: "lock",
+    UNLOCKED: "lock-open-variant",
+    MOTION_DETECTED: "walk",
+    FACE_RECOGNIZED: "face-recognition",
+    FINGERPRINT_SUCCESS: "fingerprint",
+    KEYPAD_SUCCESS: "dialpad",
+    DEFAULT: "history"
 };
 
 const METHOD_LABELS: Record<string, string> = {
-    face: "Face Recognition",
+    face: "Facial Recognition",
     fingerprint: "Fingerprint",
-    keypad: "Keypad PIN",
-    bluetooth: "Bluetooth",
+    keypad: "Keypad Entry",
 };
+
+const METHOD_ICONS: Record<string, string> = {
+    face: "face-recognition",
+    fingerprint: "fingerprint",
+    keypad: "dialpad",
+};
+
+const ALL_METHODS = ["face", "fingerprint", "keypad"] as const;
 
 function timeAgo(iso: string): string {
     const diff = Date.now() - new Date(iso).getTime();
     const minutes = Math.floor(diff / 60000);
     if (minutes < 1) return "Just now";
-    if (minutes < 60) return `${minutes} min ago`;
+    if (minutes < 60) return `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);
     if (hours < 24) return `${hours}h ago`;
     return `${Math.floor(hours / 24)}d ago`;
 }
 
 export default function Home() {
-    const { user, deviceId, httpLock, httpUnlock, isLocked, authToken } = useContext(AppContext);
+    const { user, deviceId, httpLock, httpUnlock, isLocked, authToken, cameraBaseUrl } = useContext(AppContext);
     const router = useRouter();
-    const [isCallActive, setIsCallActive] = useState(false);
 
-    // Last activity
+    // --- Media Controls State ---
+    const [isCallActive, setIsCallActive] = useState(false);
+    const [isMuted, setIsMuted] = useState(true);
+    const [hasStream, setHasStream] = useState(false);
+
+    // --- Hardware Mock State ---
+    const [batteryLevel] = useState(85);
+
+    // --- Animation Values ---
+    const lockScale = useRef(new Animated.Value(1)).current;
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+    const translateY = useRef(new Animated.Value(20)).current;
+
+    useEffect(() => {
+        if (user) {
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 600,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(translateY, {
+                    toValue: 0,
+                    duration: 600,
+                    easing: Easing.out(Easing.cubic),
+                    useNativeDriver: true,
+                })
+            ]).start();
+        }
+    }, [user, fadeAnim, translateY]);
+
+    // Data State
     const [lastEvent, setLastEvent] = useState<{ type: string; timestamp: string } | null>(null);
     const [loadingEvent, setLoadingEvent] = useState(true);
-
-    // Active access methods
-    const [activeMethods, setActiveMethods] = useState<string[]>([]);
+    const [methodsState, setMethodsState] = useState<Record<string, boolean>>({ face: false, fingerprint: false, keypad: false });
     const [loadingMethods, setLoadingMethods] = useState(true);
 
-    const toggleLock = () => (isLocked ? httpUnlock() : httpLock());
+    // --- Animated Interaction Handlers ---
+    const handleLockToggle = () => {
+        Animated.sequence([
+            Animated.timing(lockScale, { toValue: 0.92, duration: 100, useNativeDriver: true }),
+            Animated.timing(lockScale, { toValue: 1, duration: 150, useNativeDriver: true })
+        ]).start();
+        isLocked ? httpUnlock() : httpLock();
+    };
+
     const toggleCall = () => setIsCallActive((prev) => !prev);
+    const toggleMute = () => setIsMuted((prev) => !prev);
 
     const authHeaders = useCallback(() => {
         const h: Record<string, string> = {};
@@ -74,11 +128,9 @@ export default function Home() {
         return h;
     }, [authToken]);
 
+    // --- API Calls ---
     const fetchLastActivity = useCallback(async () => {
-        if (!deviceId || !authToken) {
-            setLoadingEvent(false);
-            return;
-        }
+        if (!deviceId || !authToken) return;
         setLoadingEvent(true);
         try {
             const controller = new AbortController();
@@ -103,10 +155,7 @@ export default function Home() {
     }, [deviceId, authToken, authHeaders]);
 
     const fetchActiveMethods = useCallback(async () => {
-        if (!authToken) {
-            setLoadingMethods(false);
-            return;
-        }
+        if (!authToken) return;
         setLoadingMethods(true);
         try {
             const controller = new AbortController();
@@ -119,12 +168,13 @@ export default function Home() {
             if (!res.ok) throw new Error();
             const data = await res.json();
             const methods = data.authMethods || {};
-            const active = Object.entries(methods)
-                .filter(([, v]: [string, any]) => v?.isActive)
-                .map(([k]) => k);
-            setActiveMethods(active);
+            const state: Record<string, boolean> = {};
+            for (const m of ALL_METHODS) {
+                state[m] = methods[m]?.isActive ?? false;
+            }
+            setMethodsState(state);
         } catch {
-            setActiveMethods([]);
+            setMethodsState({ face: false, fingerprint: false, keypad: false });
         } finally {
             setLoadingMethods(false);
         }
@@ -139,372 +189,464 @@ export default function Home() {
 
     if (!user) {
         return (
-            <View style={authStyles.container}>
-                <Text style={authStyles.title}>You are not logged in</Text>
-                <Text style={authStyles.subtitle}>Log in from Settings to use the app.</Text>
-                <TouchableOpacity onPress={() => router.push("/settings")} style={authStyles.button}>
-                    <Text style={authStyles.buttonText}>Go to Settings</Text>
-                </TouchableOpacity>
-            </View>
+            <SafeAreaView style={{ flex: 1, backgroundColor: "#050505" }}>
+                <View style={styles.authContainer}>
+                    <SigninForm />
+                </View>
+            </SafeAreaView>
         );
     }
 
     return (
-        <ScrollView style={{ flex: 1, flexDirection: "column" }}>
-            {/* Header */}
-            <View style={{ padding: 16, borderBottomWidth: 1, borderColor: "#e4e4e7" }}>
-                <View
-                    style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: 8,
-                    }}
-                >
-                    <Text style={{ fontSize: 18, fontWeight: "600" }}>Front Door</Text>
-                    <LockedStatus locked={isLocked} />
+        <SafeAreaView style={styles.container}>
+            <StatusBar barStyle="light-content" backgroundColor="#050505" />
+
+            {/* COMPACT HEADER */}
+            <View style={styles.header}>
+                <Text style={styles.headerTitle}>Front Door</Text>
+                <View style={styles.headerRight}>
+                    <View style={styles.statusIcons}>
+                        <MaterialCommunityIcons name="wifi" size={15} color="#71717A" style={styles.wifiIcon} />
+                        <View style={styles.batteryContainer}>
+                            <Text style={styles.batteryText}>{batteryLevel}%</Text>
+                            <MaterialCommunityIcons name="battery-80" size={16} color="#71717A" />
+                        </View>
+                    </View>
+                    <TouchableOpacity onPress={() => router.push("/settings")}>
+                        <MaterialCommunityIcons name="cog-outline" size={24} color="#A1A1AA" />
+                    </TouchableOpacity>
                 </View>
-                <Text style={{ color: "#6b7280" }}>Live View</Text>
             </View>
 
-            {/* Live Camera Feed */}
-            <CameraFeed isCallActive={isCallActive} />
+            <ScrollView showsVerticalScrollIndicator={false}>
 
-            {/* Quick Actions + Status Cards */}
-            <View style={{ padding: 16, flex: 1 }}>
-                {/* Quick Actions */}
-                <View style={{ flexDirection: "row", marginBottom: 16 }}>
-                    <LockButton locked={isLocked} onLockCallback={toggleLock} />
-                    <StartCallButton callActive={isCallActive} onStartCallCallback={toggleCall} />
+                {/* HERO CAMERA FEED */}
+                <View style={styles.cameraHero}>
+                    <CameraFeed onStreamChange={setHasStream} />
+
+                    {/* LIVE dot — only shown when the camera stream is active */}
+                    {hasStream && (
+                        <View style={styles.liveOverlay}>
+                            <PulseDot />
+                            <Text style={styles.liveText}>LIVE</Text>
+                        </View>
+                    )}
+
+                    {/* CAMERA MEDIA CONTROLS */}
+                    <View style={styles.cameraControls}>
+                        <TouchableOpacity
+                            style={[styles.overlayButton, !isMuted && styles.overlayButtonActive]}
+                            onPress={toggleMute}
+                        >
+                            <MaterialCommunityIcons
+                                name={isMuted ? "volume-off" : "volume-high"}
+                                size={22}
+                                color={!isMuted ? "#000" : "#fff"}
+                            />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.overlayButton, isCallActive && styles.overlayButtonActive]}
+                            onPress={toggleCall}
+                        >
+                            <MaterialCommunityIcons
+                                name={isCallActive ? "microphone" : "microphone-off"}
+                                size={22}
+                                color={isCallActive ? "#000" : "#fff"}
+                            />
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.overlayButton}>
+                            <MaterialCommunityIcons name="fullscreen" size={22} color="#fff" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
-                {/* Status Cards */}
-                <View style={{ rowGap: 12 }}>
-                    {/* Last Activity Card */}
-                    <View style={cardStyle.card}>
-                        <View style={{ flexDirection: "row", alignItems: "center" }}>
-                            <View style={cardStyle.iconWrap}>
-                                <Image
-                                    source={require("../../assets/images/bell.png")}
-                                    style={{ width: 20, height: 20, tintColor: "#2563eb" }}
+                {/* ANIMATED ACTION SECTION */}
+                <Animated.View style={[styles.actionSection, { opacity: fadeAnim, transform: [{ translateY }] }]}>
+                    <Animated.View style={{ transform: [{ scale: lockScale }] }}>
+                        <TouchableOpacity
+                            style={[styles.sleekLockPill, isLocked ? styles.pillLocked : styles.pillUnlocked]}
+                            onPress={handleLockToggle}
+                            activeOpacity={1}
+                        >
+                            <View style={[styles.pillIconBg, isLocked ? styles.pillIconBgLocked : styles.pillIconBgUnlocked]}>
+                                <MaterialCommunityIcons
+                                    name={isLocked ? "lock" : "lock-open-variant"}
+                                    size={20}
+                                    color={isLocked ? "#10B981" : "#EF4444"}
                                 />
                             </View>
-                            <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 14, fontWeight: "500" }}>Last Activity</Text>
-                                {loadingEvent ? (
-                                    <ActivityIndicator
-                                        size="small"
-                                        color="#9ca3af"
-                                        style={{ alignSelf: "flex-start", marginTop: 4 }}
-                                    />
-                                ) : lastEvent ? (
-                                    <Text style={{ fontSize: 13, color: "#6b7280" }}>
-                                        {EVENT_LABELS[lastEvent.type] ?? lastEvent.type}
-                                        {" • "}
-                                        {timeAgo(lastEvent.timestamp)}
-                                    </Text>
-                                ) : (
-                                    <Text style={{ fontSize: 13, color: "#9ca3af" }}>No recent activity</Text>
-                                )}
-                            </View>
+                            <Text style={styles.sleekLockText}>
+                                {isLocked ? "Tap to Unlock" : "Tap to Lock"}
+                            </Text>
+                        </TouchableOpacity>
+                    </Animated.View>
+                </Animated.View>
+
+                {/* ACTIVITY + ACCESS METHODS */}
+                <Animated.View style={[styles.activitySection, { opacity: fadeAnim, transform: [{ translateY }] }]}>
+
+                    {/* Recent Activity */}
+                    <Text style={styles.sectionTitle}>Recent Activity</Text>
+                    <View style={styles.activityCard}>
+                        <View style={styles.activityIconWrapper}>
+                            <MaterialCommunityIcons
+                                name={lastEvent ? (EVENT_ICONS[lastEvent.type] || EVENT_ICONS.DEFAULT) : "clock-outline"}
+                                size={22}
+                                color="#A1A1AA"
+                            />
+                        </View>
+                        <View style={styles.activityTextWrapper}>
+                            <Text style={styles.activityTitle}>
+                                {loadingEvent ? "Checking logs..." : lastEvent ? (EVENT_LABELS[lastEvent.type] ?? lastEvent.type) : "No recent activity"}
+                            </Text>
+                            {lastEvent && <Text style={styles.activityTime}>{timeAgo(lastEvent.timestamp)}</Text>}
                         </View>
                     </View>
 
-                    {/* Access Methods Card */}
-                    <View style={cardStyle.card}>
-                        <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 12 }}>
-                            Active Access Methods
-                        </Text>
-
-                        {loadingMethods ? (
-                            <View style={{ alignItems: "center", paddingVertical: 12 }}>
-                                <ActivityIndicator size="small" color="#2563eb" />
-                                <Text style={{ fontSize: 13, color: "#6b7280", marginTop: 6 }}>
-                                    Loading methods...
-                                </Text>
-                            </View>
-                        ) : activeMethods.length === 0 ? (
-                            <View style={{ alignItems: "center", paddingVertical: 12 }}>
-                                <Text style={{ fontSize: 14, color: "#6b7280" }}>No access methods enabled</Text>
-                                <Text style={{ fontSize: 12, color: "#9ca3af", marginTop: 4 }}>
-                                    Configure in Settings → Manage Users
-                                </Text>
-                            </View>
-                        ) : (
-                            <View style={{ rowGap: 8 }}>
-                                {activeMethods.map((method) => (
-                                    <View
-                                        key={method}
-                                        style={{
-                                            flexDirection: "row",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            padding: 8,
-                                            borderRadius: 10,
-                                            backgroundColor: "#f4f4f5",
-                                        }}
-                                    >
-                                        <View style={{ flexDirection: "row", alignItems: "center" }}>
-                                            <View
-                                                style={{
-                                                    width: 32,
-                                                    height: 32,
-                                                    borderRadius: 16,
-                                                    backgroundColor: "#2563eb",
-                                                    justifyContent: "center",
-                                                    alignItems: "center",
-                                                    marginRight: 8,
-                                                }}
-                                            >
-                                                <Text style={{ color: "white", fontWeight: "600", fontSize: 11 }}>
-                                                    {method[0].toUpperCase()}
-                                                </Text>
-                                            </View>
-                                            <Text style={{ fontSize: 14 }}>
-                                                {METHOD_LABELS[method] ?? method}
-                                            </Text>
-                                        </View>
-                                        <BadgeOutline>Active</BadgeOutline>
+                    {/* Access Methods — individual cards */}
+                    <Text style={styles.sectionTitle}>Access Methods</Text>
+                    <View style={styles.methodsGrid}>
+                        {ALL_METHODS.map((method) => {
+                            const enabled = methodsState[method] ?? false;
+                            return (
+                                <View key={method} style={styles.methodCard}>
+                                    <View style={[styles.methodIconWrapper, { backgroundColor: enabled ? "#10B98115" : "#EF444415" }]}>
+                                        <MaterialCommunityIcons
+                                            name={METHOD_ICONS[method] as any}
+                                            size={22}
+                                            color={enabled ? "#10B981" : "#EF4444"}
+                                        />
                                     </View>
-                                ))}
-                            </View>
-                        )}
+                                    <Text style={styles.methodLabel} numberOfLines={1}>
+                                        {METHOD_LABELS[method]}
+                                    </Text>
+                                    <View style={styles.methodStatusRow}>
+                                        <View style={[styles.statusDot, { backgroundColor: enabled ? "#10B981" : "#EF4444" }]} />
+                                        <Text style={[styles.methodStatus, { color: enabled ? "#10B981" : "#EF4444" }]}>
+                                            {loadingMethods ? "…" : enabled ? "Enabled" : "Disabled"}
+                                        </Text>
+                                    </View>
+                                </View>
+                            );
+                        })}
                     </View>
-                </View>
-            </View>
-        </ScrollView>
+
+                </Animated.View>
+
+            </ScrollView>
+        </SafeAreaView>
     );
 }
 
-const cardStyle = StyleSheet.create({
-    card: {
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: "#e5e7eb",
-        backgroundColor: "white",
-    },
-    iconWrap: {
-        backgroundColor: "rgba(59,130,246,0.12)",
-        padding: 8,
-        borderRadius: 12,
-        marginRight: 12,
-    },
-});
+/* --- Pulsing Animation Component --- */
+const PulseDot = () => {
+    const opacityAnim = useRef(new Animated.Value(0.4)).current;
 
-/* Camera Feed */
-const CameraFeed = ({ isCallActive }: { isCallActive: boolean }) => {
-    const { width } = useWindowDimensions();
-    const isLargeScreen = width > 800;
+    useEffect(() => {
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(opacityAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+                Animated.timing(opacityAnim, { toValue: 0.4, duration: 800, useNativeDriver: true })
+            ])
+        ).start();
+    }, [opacityAnim]);
+
+    return <Animated.View style={[styles.liveDot, { opacity: opacityAnim }]} />;
+};
+
+/* --- Camera Feed Sub-Component --- */
+const CameraFeed = ({ onStreamChange }: { onStreamChange: (v: boolean) => void }) => {
     const { cameraBaseUrl, isWebBrowser, authToken } = useContext(AppContext);
     const [source, setSource] = useState("");
     const [webViewKey, setWebViewKey] = useState(0);
-    const upscale = 2;
 
     useFocusEffect(
         useCallback(() => {
             if (cameraBaseUrl) {
-                setSource(`${cameraBaseUrl}/stream?ts=${Date.now()}`);
+                const url = `${cameraBaseUrl}/stream?ts=${Date.now()}`;
+                setSource(url);
                 setWebViewKey((prev) => prev + 1);
+                onStreamChange(true);
+            } else {
+                setSource("");
+                onStreamChange(false);
             }
             return () => {
                 setSource("");
+                onStreamChange(false);
             };
         }, [cameraBaseUrl])
     );
 
     return (
-        <View style={{ backgroundColor: "black" }}>
-            <View
-                style={{
-                    marginHorizontal: 16,
-                    marginVertical: 16,
-                    borderRadius: 12,
-                    overflow: "hidden",
-                    alignSelf: "center",
-                    width: "100%",
-                    maxWidth: isLargeScreen ? 900 : "100%",
-                }}
-            >
-                <View style={{ width: "100%", flex: 3, aspectRatio: 16 / 9, overflow: "hidden" }}>
-                    {source ? (
-                        isWebBrowser ? (
-                            <img
-                                src={source}
-                                style={{
-                                    width: "100%",
-                                    height: "100%",
-                                    border: "none",
-                                    transform: `scale(${upscale})`,
-                                    transformOrigin: "center",
-                                    imageRendering: "pixelated",
-                                }}
-                                alt={"camera feed"}
-                            />
-                        ) : (
-                            <WebView
-                                key={webViewKey}
-                                source={{
-                                    uri: source,
-                                    headers: authToken
-                                        ? { Authorization: `Bearer ${authToken}` }
-                                        : undefined,
-                                }}
-                                scalesPageToFit={true}
-                                style={{ flex: 1, transform: [{ scale: upscale }] }}
-                                javaScriptEnabled
-                                domStorageEnabled
-                            />
-                        )
-                    ) : (
-                        <ImageBackground
-                            source={require("../../assets/images/camera-feed-test.png")}
-                            style={{ flex: 1 }}
-                            imageStyle={{ resizeMode: "cover" }}
-                        />
-                    )}
+        <View style={StyleSheet.absoluteFillObject}>
+            {source ? (
+                isWebBrowser ? (
+                    <img
+                        src={source}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        alt="Live Feed"
+                    />
+                ) : (
+                    <WebView
+                        key={webViewKey}
+                        source={{
+                            uri: source,
+                            headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+                        }}
+                        style={{ flex: 1, backgroundColor: '#050505' }}
+                        scrollEnabled={false}
+                        onError={() => onStreamChange(false)}
+                    />
+                )
+            ) : (
+                <View style={styles.videoPlaceholder}>
+                    <MaterialCommunityIcons name="video-off-outline" size={36} color="#3F3F46" />
+                    <Text style={styles.videoText}>Camera offline</Text>
+                    <Text style={styles.videoSubText}>No stream available</Text>
                 </View>
-            </View>
+            )}
         </View>
     );
 };
 
-/* Quick Actions */
-const StartCallButton = ({
-    callActive,
-    onStartCallCallback,
-}: {
-    callActive: boolean;
-    onStartCallCallback: () => void;
-}) => {
-    const micIcon = require("../../assets/images/mic.png");
-    const phoneIcon = require("../../assets/images/phone.png");
-    const backgroundColor = callActive ? "#ef4444" : "transparent";
-    const borderColor = callActive ? "#ef4444" : "#d4d4d8";
-    const textColor = callActive ? "white" : "#111827";
-    return (
-        <TouchableOpacity
-            onPress={onStartCallCallback}
-            style={{
-                flex: 1,
-                height: 80,
-                marginLeft: 6,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor,
-                backgroundColor,
-                alignItems: "center",
-                justifyContent: "center",
-                flexDirection: "column",
-            }}
-        >
-            <Image
-                source={callActive ? phoneIcon : micIcon}
-                style={{ width: 24, height: 24, marginBottom: 6, tintColor: textColor }}
-            />
-            <Text style={{ color: textColor, fontWeight: "600", fontSize: 14 }}>
-                {callActive ? "End Call" : "Start Call"}
-            </Text>
-        </TouchableOpacity>
-    );
-};
-
-const LockButton = ({ locked, onLockCallback }: { locked: boolean; onLockCallback: () => void }) => {
-    const lockedIcon = require("../../assets/images/lock.png");
-    const unlockedIcon = require("../../assets/images/lock-open.png");
-    const backgroundColor = locked ? "#111827" : "#ef4444";
-    const text = locked ? "Unlock Door" : "Lock Door";
-    const icon = locked ? unlockedIcon : lockedIcon;
-    return (
-        <TouchableOpacity
-            onPress={onLockCallback}
-            style={{
-                flex: 1,
-                height: 80,
-                marginRight: 6,
-                borderRadius: 12,
-                backgroundColor,
-                alignItems: "center",
-                justifyContent: "center",
-                flexDirection: "column",
-            }}
-        >
-            <Image source={icon} style={{ width: 24, height: 24, marginBottom: 6, tintColor: "white" }} />
-            <Text style={{ color: "white", fontWeight: "600", fontSize: 14 }}>{text}</Text>
-        </TouchableOpacity>
-    );
-};
-
-const LockedStatus = ({ locked }: { locked: boolean }) => {
-    const lockedIcon = require("../../assets/images/lock.png");
-    const unlockedIcon = require("../../assets/images/lock-open.png");
-    const bgColor = locked ? "#ef4444" : "#e5e7eb";
-    const textColor = locked ? "white" : "#111827";
-    const iconTint = locked ? "white" : "#111827";
-    return (
-        <View
-            style={{
-                backgroundColor: bgColor,
-                paddingHorizontal: 10,
-                paddingVertical: 4,
-                borderRadius: 999,
-                flexDirection: "row",
-                alignItems: "center",
-            }}
-        >
-            <Image
-                source={locked ? lockedIcon : unlockedIcon}
-                style={{ width: 14, height: 14, marginRight: 4, tintColor: iconTint }}
-            />
-            <Text style={{ color: textColor, fontWeight: "600", fontSize: 12 }}>
-                {locked ? "Locked" : "Unlocked"}
-            </Text>
-        </View>
-    );
-};
-
-const BadgeOutline = ({ children }: { children: React.ReactNode }) => (
-    <View
-        style={{
-            borderWidth: 1,
-            borderColor: "#d4d4d8",
-            borderRadius: 999,
-            paddingHorizontal: 8,
-            paddingVertical: 2,
-        }}
-    >
-        <Text style={{ fontSize: 12, color: "#111827" }}>{children}</Text>
-    </View>
-);
-
-const authStyles = StyleSheet.create({
+/* --- Styles --- */
+const styles = StyleSheet.create({
     container: {
         flex: 1,
-        alignItems: "center",
+        backgroundColor: '#050505',
+    },
+    authContainer: {
+        flex: 1,
         justifyContent: "center",
         padding: 24,
-        backgroundColor: "#fff",
-        rowGap: 12,
     },
-    title: {
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+    },
+    headerTitle: {
+        color: '#FAFAFA',
         fontSize: 20,
-        fontWeight: "700",
-        color: "#111827",
+        fontWeight: '600',
+        letterSpacing: 0.5,
     },
-    subtitle: {
+    headerRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    statusIcons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginRight: 14,
+    },
+    wifiIcon: {
+        marginRight: 8,
+    },
+    batteryContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    batteryText: {
+        color: '#71717A',
+        fontSize: 11,
+        fontWeight: '600',
+        marginRight: 2,
+    },
+    cameraHero: {
+        width: '100%',
+        aspectRatio: 16 / 9,
+        backgroundColor: '#09090B',
+        position: 'relative',
+        borderBottomWidth: 1,
+        borderColor: '#18181B',
+    },
+    videoPlaceholder: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    videoText: {
+        color: '#A1A1AA',
+        marginTop: 8,
         fontSize: 14,
-        color: "#6b7280",
-        textAlign: "center",
+        fontWeight: '500',
     },
-    button: {
+    videoSubText: {
+        color: '#52525B',
+        fontSize: 12,
+        marginTop: 2,
+    },
+    liveOverlay: {
+        position: 'absolute',
+        top: 16,
+        left: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+    },
+    liveDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#EF4444',
+        marginRight: 6,
+    },
+    liveText: {
+        color: '#fff',
+        fontSize: 11,
+        fontWeight: '700',
+        letterSpacing: 1,
+    },
+    cameraControls: {
+        position: 'absolute',
+        bottom: 16,
+        right: 16,
+        flexDirection: 'row',
+        gap: 10,
+    },
+    overlayButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    overlayButtonActive: {
+        backgroundColor: '#fff',
+    },
+    actionSection: {
+        alignItems: 'center',
+        paddingVertical: 32,
+    },
+    sleekLockPill: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 30,
+        borderWidth: 1,
+        width: 220,
+    },
+    pillLocked: {
+        backgroundColor: 'rgba(16, 185, 129, 0.08)',
+        borderColor: 'rgba(16, 185, 129, 0.25)',
+    },
+    pillUnlocked: {
+        backgroundColor: 'rgba(239, 68, 68, 0.08)',
+        borderColor: 'rgba(239, 68, 68, 0.25)',
+    },
+    pillIconBg: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    pillIconBgLocked: {
+        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    },
+    pillIconBgUnlocked: {
+        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    },
+    sleekLockText: {
+        color: '#FAFAFA',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    activitySection: {
+        paddingHorizontal: 20,
+        paddingBottom: 40,
+    },
+    sectionTitle: {
+        color: '#71717A',
+        fontSize: 12,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        marginBottom: 12,
+        marginTop: 8,
+    },
+    activityCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#09090B',
+        padding: 16,
+        borderRadius: 16,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: '#18181B',
+    },
+    activityIconWrapper: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: '#18181B',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 16,
+    },
+    activityTextWrapper: {
+        flex: 1,
+    },
+    activityTitle: {
+        color: '#E4E4E7',
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    activityTime: {
+        color: '#A1A1AA',
+        fontSize: 12,
         marginTop: 4,
-        paddingVertical: 12,
-        paddingHorizontal: 18,
-        borderRadius: 10,
-        backgroundColor: "#111827",
     },
-    buttonText: {
-        color: "#fff",
-        fontWeight: "700",
+    // Access Methods Grid
+    methodsGrid: {
+        flexDirection: 'row',
+        gap: 10,
+        marginBottom: 20,
+    },
+    methodCard: {
+        flex: 1,
+        backgroundColor: '#09090B',
+        borderRadius: 16,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: '#18181B',
+        alignItems: 'flex-start',
+        gap: 8,
+    },
+    methodIconWrapper: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    methodLabel: {
+        color: '#FAFAFA',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    methodStatusRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+    },
+    statusDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
+    methodStatus: {
+        fontSize: 11,
+        fontWeight: '500',
     },
 });
