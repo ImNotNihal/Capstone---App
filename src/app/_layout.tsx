@@ -1,4 +1,4 @@
-import { Stack, usePathname, useRouter, useSegments } from "expo-router";
+import { Stack, usePathname, useRootNavigationState, useRouter, useSegments } from "expo-router";
 import React, { useContext, useEffect } from "react";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar, StyleSheet, View } from "react-native";
@@ -8,18 +8,22 @@ import { AppProvider, AppContext } from "@/src/context/app-context";
 import { ThemeProvider, useTheme } from "@/src/context/theme-context";
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
-    const { user } = useContext(AppContext);
-    const segments = useSegments();
-    const router   = useRouter();
+    const { user }   = useContext(AppContext);
+    const segments   = useSegments();
+    const router     = useRouter();
+    const navState   = useRootNavigationState();
 
     useEffect(() => {
+        // Wait until the navigator is mounted before redirecting
+        if (!navState?.key) return;
+
         const onSignin = segments[0] === "signin";
         if (!user && !onSignin) {
             router.replace("/signin");
         } else if (user && onSignin) {
             router.replace("/");
         }
-    }, [user, segments, router]);
+    }, [user, segments, router, navState?.key]);
 
     return <>{children}</>;
 }
