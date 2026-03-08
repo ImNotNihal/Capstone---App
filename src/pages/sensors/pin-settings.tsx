@@ -65,34 +65,15 @@ export default function PinSettings() {
             });
             if (!res.ok) throw new Error();
             const data = await res.json();
-            
-            const fetchedPins: PinType[] = [];
-            const fetchedOtps: OtpType[] = [];
-            
-            data.forEach((p: any) => {
-                if (p.pinType === "otp") {
-                    fetchedOtps.push({
-                        id: p.id,
-                        label: p.label,
-                        code: p.code,
-                        expires: p.expires || "24h"
-                    });
-                } else {
-                    fetchedPins.push({
-                        id: p.id,
-                        label: p.label,
-                        code: p.code,
-                        strength: p.strength || (p.code?.length >= 6 ? "Strong" : "Moderate"),
-                        pinType: p.pinType || "permanent",
-                    });
-                }
-            });
-            
-            setPins(fetchedPins);
-            setOtpCodes(fetchedOtps);
+            setPins(data.map((p: any) => ({
+                id: p.id,
+                label: p.label,
+                code: p.code,
+                strength: p.strength || (p.code?.length >= 6 ? "Strong" : "Moderate"),
+                pinType: p.pinType || "permanent",
+            })));
         } catch {
             setPins([]);
-            setOtpCodes([]);
         } finally {
             setLoading(false);
         }
@@ -123,27 +104,19 @@ export default function PinSettings() {
         setIsAuthVisible(true);
     };
 
-    const handleGenerateOtp = async () => {
+    const handleGenerateOtp = () => {
         console.log("--> Generate OTP button pressed!");
         const newCode = Math.floor(1000 + Math.random() * 9000).toString();
+        const uniqueId = `otp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         
-        try {
-            const res = await fetch(`${API_BASE_URL}devices/${deviceId}/pins`, {
-                method: "POST",
-                headers: authHeaders(),
-                body: JSON.stringify({ 
-                    label: "Temp Guest Code", 
-                    code: newCode, 
-                    pinType: "otp",
-                    expires: "24h"
-                }),
-            });
-            if (!res.ok) throw new Error();
-            const newOtp = await res.json();
-            setOtpCodes(currentCodes => [newOtp, ...currentCodes]);
-        } catch {
-            Alert.alert("Error", "Failed to generate OTP.");
-        }
+        const newOtp = { 
+            id: uniqueId, 
+            label: "Temp Guest Code", 
+            code: newCode, 
+            expires: "24h" 
+        };
+
+        setOtpCodes(currentCodes => [newOtp, ...currentCodes]);
     };
 
     const triggerShake = () => {
@@ -274,17 +247,7 @@ export default function PinSettings() {
                                 </View>
                             </View>
                             <TouchableOpacity 
-                                onPress={async () => {
-                                    try {
-                                        await fetch(`${API_BASE_URL}devices/${deviceId}/pins/${otp.id}`, {
-                                            method: "DELETE",
-                                            headers: authHeaders(),
-                                        });
-                                        setOtpCodes(current => current.filter(o => o.id !== otp.id));
-                                    } catch {
-                                        Alert.alert("Error", "Failed to delete OTP.");
-                                    }
-                                }} 
+                                onPress={() => setOtpCodes(current => current.filter(o => o.id !== otp.id))} 
                                 style={{ padding: 12 }}
                                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                             >
