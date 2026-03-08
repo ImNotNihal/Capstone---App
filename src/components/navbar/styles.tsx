@@ -7,6 +7,9 @@ const styles = StyleSheet.create({
         alignItems: "center",
         height: 64,
         width: "100%",
+        backgroundColor: "#09090B",
+        borderTopWidth: 1,
+        borderTopColor: "#18181B",
     },
     navbarItem: {
         flex: 1,
@@ -23,17 +26,18 @@ const styles = StyleSheet.create({
         tintColor: "#2563eb",
     },
     iconInactive: {
-        tintColor: "#4b5563",
+        tintColor: "#3F3F46",
     },
     label: {
         textAlign: "center",
+        fontSize: 11,
     },
     labelActive: {
-        color: "#111827",
+        color: "#FAFAFA",
         fontWeight: "700",
     },
     labelInactive: {
-        color: "#4b5563",
+        color: "#52525B",
         fontWeight: "500",
     },
 })

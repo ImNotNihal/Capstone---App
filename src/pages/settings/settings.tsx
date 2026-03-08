@@ -1,14 +1,16 @@
+import React, { ReactNode, useState, useContext } from "react";
+import { ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import styles from "./styles";
 import { AppContext } from "@/src/context/app-context";
-import { useSettings } from "@/src/hooks/useSettings";
-import SigninForm from "@/src/pages/settings/signInForm";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import React, { ReactNode, useContext, useState } from "react";
-import { ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
-import styles from "./styles";
+import { useSettings } from "@/src/hooks/useSettings";
+import { useTheme } from "@/src/context/theme-context";
 
 export default function Settings() {
     const { user, deviceId, signout, isDeviceConnected } = useContext(AppContext);
+    const { isDark, toggleTheme } = useTheme();
     const router = useRouter();
     const { settings, loading, error, updatingKeys, updateSetting, refetch } = useSettings();
     const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -43,9 +45,9 @@ export default function Settings() {
                 <Text style={styles.subtitle}>Manage your security system</Text>
             </View>
 
-            {user !== null ? (
-                <View style={{ gap: 16 }}>
-                    {/* Profile */}
+            <View style={{ gap: 16 }}>
+                {/* Profile */}
+                {user && (
                     <View style={styles.card}>
                         <View style={styles.profileRow}>
                             <View style={styles.avatar}>
@@ -54,112 +56,136 @@ export default function Settings() {
                                 </Text>
                             </View>
                             <View style={{ flex: 1 }}>
-                                <Text style={styles.profileName}>{`${user?.firstName} ${user?.lastName}`}</Text>
-                                <Text style={styles.profileEmail}>{`${user?.email}`}</Text>
+                                <Text style={styles.profileName}>{`${user.firstName} ${user.lastName}`}</Text>
+                                <Text style={styles.profileEmail}>{`${user.email}`}</Text>
                             </View>
-                            <Text style={styles.chevronText}>›</Text>
                         </View>
                     </View>
+                )}
 
-                    {/* Quick Settings */}
-                    <View>
-                        <Text style={styles.sectionTitle}>Quick Settings</Text>
-                        {loading ? (
-                            <View style={[styles.card, { alignItems: "center", paddingVertical: 24 }]}>
-                                <ActivityIndicator size="small" color="#2563eb" />
-                                <Text style={[styles.rowSubtitle, { marginTop: 8 }]}>Loading settings...</Text>
-                            </View>
-                        ) : (
-                            <>
-                                {isOffline && (
-                                    <View style={offlineStyles.banner}>
-                                        <Text style={offlineStyles.bannerText}>{error}</Text>
-                                        <TouchableOpacity
-                                            onPress={handleRetry}
-                                            style={offlineStyles.updateButton}
-                                            disabled={retrying}
-                                        >
-                                            {retrying ? (
-                                                <ActivityIndicator size="small" color="#fff" />
-                                            ) : (
-                                                <Text style={offlineStyles.updateButtonText}>Update</Text>
-                                            )}
-                                        </TouchableOpacity>
+                {/* Quick Settings */}
+                <View>
+                    <Text style={styles.sectionTitle}>Quick Settings</Text>
+                    {loading ? (
+                        <View style={[styles.card, { alignItems: "center", paddingVertical: 24 }]}>
+                            <ActivityIndicator size="small" color="#2563eb" />
+                            <Text style={[styles.rowSubtitle, { marginTop: 8 }]}>Loading settings...</Text>
+                        </View>
+                    ) : (
+                        <>
+                            {isOffline && (
+                                <View style={offlineStyles.banner}>
+                                    <Text style={offlineStyles.bannerText}>{error}</Text>
+                                    <TouchableOpacity
+                                        onPress={handleRetry}
+                                        style={offlineStyles.updateButton}
+                                        disabled={retrying}
+                                    >
+                                        {retrying ? (
+                                            <ActivityIndicator size="small" color="#fff" />
+                                        ) : (
+                                            <Text style={offlineStyles.updateButtonText}>Update</Text>
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+
+                            <View style={[styles.card, styles.divide]}>
+                                <SettingToggle
+                                    icon={<CircleIcon label="N" color="#2563eb" />}
+                                    title="Notifications"
+                                    subtitle="Push alerts for events"
+                                    value={settings.notisEnabled}
+                                    onValueChange={(v) => handleToggle("notisEnabled", v)}
+                                    updating={updatingKeys.has("notisEnabled")}
+                                    disabled={isOffline}
+                                />
+
+                                {/* Appearance toggle */}
+                                <View style={styles.settingToggleRow}>
+                                    <View style={styles.rowCenter}>
+                                        <View style={[styles.circleIcon, { backgroundColor: "#71717A1a" }]}>
+                                            <MaterialCommunityIcons
+                                                name={isDark ? "weather-night" : "weather-sunny"}
+                                                size={16}
+                                                color="#71717A"
+                                            />
+                                        </View>
+                                        <View style={{ flexShrink: 1 }}>
+                                            <Text style={styles.rowTitle}>Appearance</Text>
+                                            <Text style={styles.rowSubtitle}>{isDark ? "Dark mode" : "Light mode"}</Text>
+                                        </View>
                                     </View>
-                                )}
-
-                                <View style={[styles.card, styles.divide]}>
-                                    <SettingToggle
-                                        icon={<CircleIcon label="N" color="#2563eb" />}
-                                        title="Notifications"
-                                        subtitle="Push alerts for events"
-                                        value={settings.notisEnabled}
-                                        onValueChange={(v) => handleToggle("notisEnabled", v)}
-                                        updating={updatingKeys.has("notisEnabled")}
-                                        disabled={isOffline}
+                                    <Switch
+                                        value={isDark}
+                                        onValueChange={toggleTheme}
+                                        trackColor={{ false: "#27272A", true: "#2563eb" }}
+                                        thumbColor="#FAFAFA"
                                     />
                                 </View>
-                            </>
-                        )}
+                            </View>
+                        </>
+                    )}
 
-                        {settingsError && (
-                            <Text style={{ color: "#b91c1c", fontSize: 13, marginTop: 6, marginLeft: 4 }}>
-                                {settingsError}
-                            </Text>
-                        )}
+                    {settingsError && (
+                        <Text style={{ color: "#b91c1c", fontSize: 13, marginTop: 6, marginLeft: 4 }}>
+                            {settingsError}
+                        </Text>
+                    )}
+                </View>
+
+                {/* System */}
+                <View>
+                    <Text style={styles.sectionTitle}>System</Text>
+                    <View style={[styles.card, styles.divide]}>
+                        <SettingLink
+                            icon={<CircleIcon label="U" color="#2563eb" />}
+                            title="Manage Users"
+                            subtitle="Users with access"
+                            onPress={() => router.push("/settings/manage-users")}
+                        />
+
+                        <SettingLink
+                            icon={<CircleIcon label="V" color="#f97316" />}
+                            title="Camera Settings"
+                            subtitle="Video quality & recording"
+                            onPress={() => router.push("/settings/camera-settings")}
+                        />
+
+                        <SettingLink
+                            icon={<CircleIcon label="W" color="#0ea5e9" />}
+                            title="Device Configuration"
+                            subtitle="Wi-Fi, Bluetooth, and firmware"
+                            rightContent={
+                                <Text style={[styles.badge, styles.badgeSolid]}>
+                                    {isDeviceConnected ? "Online" : "Offline"}
+                                </Text>
+                            }
+                            onPress={() => router.push("/settings/device-config")}
+                        />
+
+                        <SettingLink
+                            icon={<CircleIcon label="+" color="#10B981" />}
+                            title="Add a Device"
+                            subtitle="Set up a new smart lock via Bluetooth"
+                            onPress={() => router.push("/add-device")}
+                        />
                     </View>
+                </View>
 
-                    {/* System */}
-                    <View>
-                        <Text style={styles.sectionTitle}>System</Text>
-                        <View style={[styles.card, styles.divide]}>
-                            <SettingLink
-                                icon={<CircleIcon label="U" color="#2563eb" />}
-                                title="Manage Users"
-                                subtitle="Users with access"
-                                onPress={() => router.push("/settings/manage-users")}
-                            />
-
-                            <SettingLink
-                                icon={<CircleIcon label="V" color="#f97316" />}
-                                title="Camera Settings"
-                                subtitle="Video quality & recording"
-                                onPress={() => router.push("/settings/camera-settings")}
-                            />
-
-                            <SettingLink
-                                icon={<CircleIcon label="W" color="#0ea5e9" />}
-                                title="Device Configuration"
-                                subtitle="Wi-Fi, Bluetooth, and firmware"
-                                rightContent={
-                                    <Text style={[styles.badge, styles.badgeSolid]}>
-                                        {isDeviceConnected ? "Online" : "Offline"}
-                                    </Text>
-                                }
-                                onPress={() => router.push("/settings/device-config")}
-                            />
-
-                            <SettingLink
-                                icon={<CircleIcon label="+" color="#10B981" />}
-                                title="Add a Device"
-                                subtitle="Set up a new smart lock via Bluetooth"
-                                onPress={() => router.push("/add-device")}
-                            />
-                        </View>
-                    </View>
-
-                    {/* System info */}
+                {/* System info */}
+                {deviceId && (
                     <View style={[styles.card, styles.systemInfo]}>
-                        <InfoRow label="Device ID" value={deviceId || "—"} />
+                        <InfoRow label="Device ID" value={deviceId} />
                     </View>
+                )}
 
+                {user && (
                     <TouchableOpacity style={[styles.button, styles.buttonGhost]} onPress={signout} activeOpacity={0.7}>
                         <Text style={styles.buttonGhostText}>Sign Out</Text>
                     </TouchableOpacity>
-                </View>
-            ) : (
-                <SigninForm />
-            )}
+                )}
+            </View>
         </ScrollView>
     );
 }
