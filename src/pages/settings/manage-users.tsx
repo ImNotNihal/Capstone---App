@@ -1,8 +1,9 @@
 import React, { useCallback, useContext, useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 import styles from "./styles";
 import { AppContext } from "@/src/context/app-context";
 import { API_BASE_URL } from "@/src/config";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 const VALID_METHODS = ["face", "fingerprint", "keypad", "bluetooth"] as const;
 type AuthMethod = (typeof VALID_METHODS)[number];
@@ -37,6 +38,12 @@ export default function ManageUsers() {
     const [loadingRole, setLoadingRole] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [togglingMethod, setTogglingMethod] = useState<AuthMethod | null>(null);
+
+    // Invite user state
+    const [isInviteOpen, setIsInviteOpen] = useState(false);
+    const [inviteEmail, setInviteEmail] = useState("");
+    const [inviteSending, setInviteSending] = useState(false);
+    const [inviteError, setInviteError] = useState("");
 
     const headers = useCallback(() => {
         const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -133,10 +140,38 @@ export default function ManageUsers() {
         }
     };
 
+    const sendInvite = async () => {
+        if (!inviteEmail.trim() || !inviteEmail.includes("@")) {
+            setInviteError("Please enter a valid email address.");
+            return;
+        }
+        setInviteSending(true);
+        setInviteError("");
+        try {
+            const res = await fetch(`${API_BASE_URL}devices/${deviceId}/invite`, {
+                method: "POST",
+                headers: headers(),
+                body: JSON.stringify({ email: inviteEmail.trim(), role: "guest" }),
+            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.detail || "Failed to send invite");
+            }
+            setIsInviteOpen(false);
+            setInviteEmail("");
+            Alert.alert("Invite Sent", `An invite has been sent to ${inviteEmail.trim()}.`);
+        } catch (e: any) {
+            setInviteError(e.message || "Failed to send invite");
+        } finally {
+            setInviteSending(false);
+        }
+    };
+
     const role = userRole ?? "guest";
     const permissions = ROLE_PERMISSIONS[role] ?? [];
 
     return (
+        <>
         <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.title}>Manage Users</Text>
@@ -271,9 +306,83 @@ export default function ManageUsers() {
                     </Text>
                 </View>
             </View>
+            {/* Add User Button */}
+            {role === "owner" && (
+                <TouchableOpacity style={inviteStyles.inviteBtn} onPress={() => { setInviteEmail(""); setInviteError(""); setIsInviteOpen(true); }}>
+                    <MaterialCommunityIcons name="account-plus-outline" size={20} color="#050505" />
+                    <Text style={inviteStyles.inviteBtnText}>Invite User</Text>
+                </TouchableOpacity>
+            )}
+
         </ScrollView>
+
+        {/* INVITE MODAL */}
+        <Modal visible={isInviteOpen} transparent animationType="slide">
+            <View style={inviteStyles.overlay}>
+                <View style={inviteStyles.sheet}>
+                    <Text style={inviteStyles.sheetTitle}>Invite a User</Text>
+                    <Text style={inviteStyles.sheetSubtitle}>Enter their email to grant guest access to this device.</Text>
+
+                    {inviteError !== "" && (
+                        <View style={inviteStyles.errorBox}>
+                            <Text style={inviteStyles.errorText}>{inviteError}</Text>
+                        </View>
+                    )}
+
+                    <TextInput
+                        style={inviteStyles.input}
+                        placeholder="Email address"
+                        placeholderTextColor="#71717A"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        value={inviteEmail}
+                        onChangeText={(t) => { setInviteEmail(t); setInviteError(""); }}
+                        autoFocus
+                    />
+
+                    <View style={inviteStyles.buttons}>
+                        <TouchableOpacity style={inviteStyles.cancelBtn} onPress={() => setIsInviteOpen(false)}>
+                            <Text style={inviteStyles.cancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={inviteStyles.sendBtn} onPress={sendInvite} disabled={inviteSending}>
+                            {inviteSending
+                                ? <ActivityIndicator color="#050505" />
+                                : <Text style={inviteStyles.sendText}>Send Invite</Text>
+                            }
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        </Modal>
+        </>
     );
 }
+
+const inviteStyles = StyleSheet.create({
+    inviteBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#FAFAFA",
+        borderRadius: 14,
+        paddingVertical: 14,
+        gap: 8,
+        marginTop: 8,
+    },
+    inviteBtnText: { color: "#050505", fontWeight: "700", fontSize: 15 },
+    overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "center", padding: 24 },
+    sheet: { backgroundColor: "#111111", borderRadius: 28, padding: 28, borderWidth: 1, borderColor: "#1F1F1F" },
+    sheetTitle: { color: "#FAFAFA", fontSize: 20, fontWeight: "700", textAlign: "center" },
+    sheetSubtitle: { color: "#71717A", fontSize: 14, textAlign: "center", marginTop: 8, marginBottom: 24 },
+    errorBox: { backgroundColor: "#EF444415", borderWidth: 1, borderColor: "#EF444430", borderRadius: 8, padding: 12, marginBottom: 12 },
+    errorText: { color: "#EF4444", fontSize: 13 },
+    input: { backgroundColor: "#050505", height: 56, borderRadius: 12, color: "#FAFAFA", paddingHorizontal: 16, fontSize: 15, borderWidth: 1, borderColor: "#27272A" },
+    buttons: { flexDirection: "row", gap: 12, marginTop: 24 },
+    cancelBtn: { flex: 1, height: 50, justifyContent: "center", alignItems: "center" },
+    cancelText: { color: "#71717A", fontWeight: "600", fontSize: 15 },
+    sendBtn: { flex: 1, height: 50, backgroundColor: "#FAFAFA", borderRadius: 12, justifyContent: "center", alignItems: "center" },
+    sendText: { color: "#050505", fontWeight: "700", fontSize: 15 },
+});
 
 const localStyles = {
     userAvatar: {

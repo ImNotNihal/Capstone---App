@@ -47,10 +47,20 @@ const EVENT_ICONS: Record<string, any> = {
 
 const METHOD_LABELS: Record<string, string> = {
     face: "Facial Recognition",
+    fingerprint: "Fingerprint",
+    keypad: "Keypad Entry",
+};
+
+const METHOD_ICONS: Record<string, string> = {
+    face: "face-recognition",
+    fingerprint: "fingerprint",
+    keypad: "dialpad",
     fingerprint: "Fingerprint Scanner",
     keypad: "Keypad Entry",
     bluetooth: "Bluetooth Proximity",
 };
+
+const ALL_METHODS = ["face", "fingerprint", "keypad"] as const;
 
 function timeAgo(iso: string): string {
     const diff = Date.now() - new Date(iso).getTime();
@@ -63,8 +73,13 @@ function timeAgo(iso: string): string {
 }
 
 export default function Home() {
-    const { user, deviceId, httpLock, httpUnlock, isLocked, authToken } = useContext(AppContext);
+    const { user, deviceId, httpLock, httpUnlock, isLocked, authToken, cameraBaseUrl } = useContext(AppContext);
     const router = useRouter();
+
+    // --- Media Controls State ---
+    const [isCallActive, setIsCallActive] = useState(false);
+    const [isMuted, setIsMuted] = useState(true);
+    const [hasStream, setHasStream] = useState(false);
     
     // --- Media Controls State ---
     const [isCallActive, setIsCallActive] = useState(false);
@@ -100,12 +115,16 @@ export default function Home() {
     // Data State
     const [lastEvent, setLastEvent] = useState<{ type: string; timestamp: string } | null>(null);
     const [loadingEvent, setLoadingEvent] = useState(true);
+    const [methodsState, setMethodsState] = useState<Record<string, boolean>>({ face: false, fingerprint: false, keypad: false });
     const [activeMethods, setActiveMethods] = useState<string[]>([]);
     const [loadingMethods, setLoadingMethods] = useState(true);
 
     // --- Animated Interaction Handlers ---
     const handleLockToggle = () => {
         Animated.sequence([
+            Animated.timing(lockScale, { toValue: 0.92, duration: 100, useNativeDriver: true }),
+            Animated.timing(lockScale, { toValue: 1, duration: 150, useNativeDriver: true })
+        ]).start();
             Animated.timing(lockScale, {
                 toValue: 0.92,
                 duration: 100,
@@ -170,12 +189,13 @@ export default function Home() {
             if (!res.ok) throw new Error();
             const data = await res.json();
             const methods = data.authMethods || {};
-            const active = Object.entries(methods)
-                .filter(([, v]: [string, any]) => v?.isActive)
-                .map(([k]) => k);
-            setActiveMethods(active);
+            const state: Record<string, boolean> = {};
+            for (const m of ALL_METHODS) {
+                state[m] = methods[m]?.isActive ?? false;
+            }
+            setMethodsState(state);
         } catch {
-            setActiveMethods([]);
+            setMethodsState({ face: false, fingerprint: false, keypad: false });
         } finally {
             setLoadingMethods(false);
         }
@@ -201,6 +221,10 @@ export default function Home() {
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="#050505" />
+
+            {/* COMPACT HEADER */}
+            <View style={styles.header}>
+                <Text style={styles.headerTitle}>Front Door</Text>
             
             {/* COMPACT HEADER WITH HARDWARE STATUS */}
             <View style={styles.header}>
@@ -222,6 +246,41 @@ export default function Home() {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
+
+                {/* HERO CAMERA FEED */}
+                <View style={styles.cameraHero}>
+                    <CameraFeed onStreamChange={setHasStream} />
+
+                    {/* LIVE dot — only shown when the camera stream is active */}
+                    {hasStream && (
+                        <View style={styles.liveOverlay}>
+                            <PulseDot />
+                            <Text style={styles.liveText}>LIVE</Text>
+                        </View>
+                    )}
+
+                    {/* CAMERA MEDIA CONTROLS */}
+                    <View style={styles.cameraControls}>
+                        <TouchableOpacity
+                            style={[styles.overlayButton, !isMuted && styles.overlayButtonActive]}
+                            onPress={toggleMute}
+                        >
+                            <MaterialCommunityIcons
+                                name={isMuted ? "volume-off" : "volume-high"}
+                                size={22}
+                                color={!isMuted ? "#000" : "#fff"}
+                            />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.overlayButton, isCallActive && styles.overlayButtonActive]}
+                            onPress={toggleCall}
+                        >
+                            <MaterialCommunityIcons
+                                name={isCallActive ? "microphone" : "microphone-off"}
+                                size={22}
+                                color={isCallActive ? "#000" : "#fff"}
+                            />
+                        </TouchableOpacity>
                 
                 {/* HERO CAMERA FEED */}
                 <View style={styles.cameraHero}>
@@ -268,12 +327,18 @@ export default function Home() {
                 {/* ANIMATED ACTION SECTION */}
                 <Animated.View style={[styles.actionSection, { opacity: fadeAnim, transform: [{ translateY }] }]}>
                     <Animated.View style={{ transform: [{ scale: lockScale }] }}>
+                        <TouchableOpacity
+                            style={[styles.sleekLockPill, isLocked ? styles.pillLocked : styles.pillUnlocked]}
                         <TouchableOpacity 
                             style={[styles.sleekLockPill, isLocked ? styles.pillLocked : styles.pillUnlocked]} 
                             onPress={handleLockToggle}
                             activeOpacity={1}
                         >
                             <View style={[styles.pillIconBg, isLocked ? styles.pillIconBgLocked : styles.pillIconBgUnlocked]}>
+                                <MaterialCommunityIcons
+                                    name={isLocked ? "lock" : "lock-open-variant"}
+                                    size={20}
+                                    color={isLocked ? "#10B981" : "#EF4444"}
                                 <MaterialCommunityIcons 
                                     name={isLocked ? "lock" : "lock-open-variant"} 
                                     size={20} 
@@ -287,6 +352,17 @@ export default function Home() {
                     </Animated.View>
                 </Animated.View>
 
+                {/* ACTIVITY + ACCESS METHODS */}
+                <Animated.View style={[styles.activitySection, { opacity: fadeAnim, transform: [{ translateY }] }]}>
+
+                    {/* Recent Activity */}
+                    <Text style={styles.sectionTitle}>Recent Activity</Text>
+                    <View style={styles.activityCard}>
+                        <View style={styles.activityIconWrapper}>
+                            <MaterialCommunityIcons
+                                name={lastEvent ? (EVENT_ICONS[lastEvent.type] || EVENT_ICONS.DEFAULT) : "clock-outline"}
+                                size={22}
+                                color="#A1A1AA"
                 {/* ANIMATED ACTIVITY LOG */}
                 <Animated.View style={[styles.activitySection, { opacity: fadeAnim, transform: [{ translateY }] }]}>
                     <Text style={styles.sectionTitle}>Recent Activity</Text>
@@ -305,6 +381,34 @@ export default function Home() {
                             </Text>
                             {lastEvent && <Text style={styles.activityTime}>{timeAgo(lastEvent.timestamp)}</Text>}
                         </View>
+                    </View>
+
+                    {/* Access Methods — individual cards */}
+                    <Text style={styles.sectionTitle}>Access Methods</Text>
+                    <View style={styles.methodsGrid}>
+                        {ALL_METHODS.map((method) => {
+                            const enabled = methodsState[method] ?? false;
+                            return (
+                                <View key={method} style={styles.methodCard}>
+                                    <View style={[styles.methodIconWrapper, { backgroundColor: enabled ? "#10B98115" : "#EF444415" }]}>
+                                        <MaterialCommunityIcons
+                                            name={METHOD_ICONS[method] as any}
+                                            size={22}
+                                            color={enabled ? "#10B981" : "#EF4444"}
+                                        />
+                                    </View>
+                                    <Text style={styles.methodLabel} numberOfLines={1}>
+                                        {METHOD_LABELS[method]}
+                                    </Text>
+                                    <View style={styles.methodStatusRow}>
+                                        <View style={[styles.statusDot, { backgroundColor: enabled ? "#10B981" : "#EF4444" }]} />
+                                        <Text style={[styles.methodStatus, { color: enabled ? "#10B981" : "#EF4444" }]}>
+                                            {loadingMethods ? "…" : enabled ? "Enabled" : "Disabled"}
+                                        </Text>
+                                    </View>
+                                </View>
+                            );
+                        })}
                     </View>
 
                     <Text style={styles.sectionTitle}>Active Access Methods</Text>
@@ -348,6 +452,12 @@ const PulseDot = () => {
 };
 
 /* --- Camera Feed Sub-Component --- */
+const CameraFeed = ({ onStreamChange }: { onStreamChange: (v: boolean) => void }) => {
+
+    return <Animated.View style={[styles.liveDot, { opacity: opacityAnim }]} />;
+};
+
+/* --- Camera Feed Sub-Component --- */
 const CameraFeed = () => {
     const { cameraBaseUrl, isWebBrowser, authToken } = useContext(AppContext);
     const [source, setSource] = useState("");
@@ -356,9 +466,18 @@ const CameraFeed = () => {
     useFocusEffect(
         useCallback(() => {
             if (cameraBaseUrl) {
-                setSource(`${cameraBaseUrl}/stream?ts=${Date.now()}`);
+                const url = `${cameraBaseUrl}/stream?ts=${Date.now()}`;
+                setSource(url);
                 setWebViewKey((prev) => prev + 1);
+                onStreamChange(true);
+            } else {
+                setSource("");
+                onStreamChange(false);
             }
+            return () => {
+                setSource("");
+                onStreamChange(false);
+            };
             return () => setSource("");
         }, [cameraBaseUrl])
     );
@@ -381,11 +500,14 @@ const CameraFeed = () => {
                         }}
                         style={{ flex: 1, backgroundColor: '#050505' }}
                         scrollEnabled={false}
+                        onError={() => onStreamChange(false)}
                     />
                 )
             ) : (
                 <View style={styles.videoPlaceholder}>
                     <MaterialCommunityIcons name="video-off-outline" size={36} color="#3F3F46" />
+                    <Text style={styles.videoText}>Camera offline</Text>
+                    <Text style={styles.videoSubText}>No stream available</Text>
                     <Text style={styles.videoText}>Camera sleeping</Text>
                     <Text style={styles.videoSubText}>Waiting for motion</Text>
                 </View>
@@ -442,6 +564,30 @@ const styles = StyleSheet.create({
     },
     cameraHero: {
         width: '100%',
+        aspectRatio: 16 / 9,
+        backgroundColor: '#09090B',
+        position: 'relative',
+        borderBottomWidth: 1,
+        borderColor: '#18181B',
+    },
+    videoPlaceholder: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    },
+    batteryContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    batteryText: {
+        color: '#71717A',
+        fontSize: 11,
+        fontWeight: '600',
+        marginRight: 2,
+    },
+    cameraHero: {
+        width: '100%',
         aspectRatio: 16 / 9, 
         backgroundColor: '#09090B',
         position: 'relative',
@@ -458,6 +604,30 @@ const styles = StyleSheet.create({
         marginTop: 8,
         fontSize: 14,
         fontWeight: '500',
+    },
+    videoSubText: {
+        color: '#52525B',
+        fontSize: 12,
+        marginTop: 2,
+    },
+    liveOverlay: {
+        position: 'absolute',
+        top: 16,
+        left: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+    },
+    liveDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#EF4444',
+        marginRight: 6,
+    },
     },
     videoSubText: {
         color: '#52525B',
@@ -552,6 +722,7 @@ const styles = StyleSheet.create({
     },
     sectionTitle: {
         color: '#71717A',
+        fontSize: 12,
         fontSize: 13,
         fontWeight: '600',
         textTransform: 'uppercase',
@@ -583,11 +754,56 @@ const styles = StyleSheet.create({
     },
     activityTitle: {
         color: '#E4E4E7',
+        fontSize: 14,
         fontSize: 15,
         fontWeight: '500',
     },
     activityTime: {
         color: '#A1A1AA',
+        fontSize: 12,
+        marginTop: 4,
+    },
+    // Access Methods Grid
+    methodsGrid: {
+        flexDirection: 'row',
+        gap: 10,
+        marginBottom: 20,
+    },
+    methodCard: {
+        flex: 1,
+        backgroundColor: '#09090B',
+        borderRadius: 16,
+        padding: 14,
+        borderWidth: 1,
+        borderColor: '#18181B',
+        alignItems: 'flex-start',
+        gap: 8,
+    },
+    methodIconWrapper: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    methodLabel: {
+        color: '#FAFAFA',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    methodStatusRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+    },
+    statusDot: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+    },
+    methodStatus: {
+        fontSize: 11,
+        fontWeight: '500',
         fontSize: 13,
         marginTop: 4,
     },
