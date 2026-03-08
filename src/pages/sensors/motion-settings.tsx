@@ -7,6 +7,7 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Alert,
     Animated,
     ImageBackground,
     SafeAreaView,
@@ -46,7 +47,8 @@ export default function MotionSettings() {
             if (!res.ok) return;
             const data = await res.json();
             if (data.motionSensitivity) setSensitivity(data.motionSensitivity);
-            if (typeof data.cameraEnabled === "boolean") setIsEnabled(data.cameraEnabled);
+            if (typeof data.motionEnabled === "boolean") setIsEnabled(data.motionEnabled);
+            if (Array.isArray(data.activeZones) && data.activeZones.length === 4) setActiveZones(data.activeZones);
         } catch {} finally {
             setLoading(false);
         }
@@ -65,10 +67,13 @@ export default function MotionSettings() {
     };
 
     const handleSave = async () => {
-        if (!deviceId) return;
+        if (!deviceId || !authToken) {
+            Alert.alert("Not connected", "Please sign in and make sure a device is linked to your account.");
+            return;
+        }
         setSaving(true);
         try {
-            await fetch(`${API_BASE_URL}settings/${deviceId}`, {
+            const res = await fetch(`${API_BASE_URL}settings/${deviceId}`, {
                 method: "PUT",
                 headers: authHeaders(),
                 body: JSON.stringify({
@@ -77,9 +82,13 @@ export default function MotionSettings() {
                     activeZones: activeZones,
                 }),
             });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body?.detail ?? `Server error ${res.status}`);
+            }
             router.back();
-        } catch {
-            // stay on page if save fails
+        } catch (e: any) {
+            Alert.alert("Save failed", e.message ?? "Could not save motion settings. Please try again.");
         } finally {
             setSaving(false);
         }

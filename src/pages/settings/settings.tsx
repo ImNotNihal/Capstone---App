@@ -1,5 +1,5 @@
 import React, { ReactNode, useState, useContext } from "react";
-import { ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { createStyles } from "./styles";
 import { AppContext } from "@/src/context/app-context";
@@ -202,18 +202,25 @@ type SettingToggleProps = {
     disabled?: boolean;
 };
 
-const SettingToggle = ({ icon, title, subtitle, value, onValueChange, updating, disabled }: SettingToggleProps) => (
-    <View style={[styles.settingToggleRow, disabled && { opacity: 0.5 }]}>
-        <View style={styles.rowCenter}>
-            {icon}
-            <View style={{ flexShrink: 1 }}>
-                <Text style={styles.rowTitle}>{title}</Text>
-                <Text style={styles.rowSubtitle}>{subtitle}</Text>
+const SettingToggle = ({ icon, title, subtitle, value, onValueChange, updating, disabled }: SettingToggleProps) => {
+    const { colors } = useTheme();
+    return (
+        <View style={[{
+            flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+            paddingHorizontal: 14, paddingVertical: 12, gap: 12,
+            borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,
+        }, disabled && { opacity: 0.5 }]}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flexShrink: 1 }}>
+                {icon}
+                <View style={{ flexShrink: 1 }}>
+                    <Text style={{ fontSize: 15, fontWeight: "600", color: colors.text }}>{title}</Text>
+                    <Text style={{ color: colors.textTertiary, fontSize: 13 }}>{subtitle}</Text>
+                </View>
             </View>
+            {updating ? <ActivityIndicator size="small" color="#2563eb" /> : <Switch value={value} onValueChange={onValueChange} disabled={disabled} />}
         </View>
-        {updating ? <ActivityIndicator size="small" color="#2563eb" /> : <Switch value={value} onValueChange={onValueChange} disabled={disabled} />}
-    </View>
-);
+    );
+};
 
 type SettingLinkProps = {
     icon: ReactNode;
@@ -223,31 +230,47 @@ type SettingLinkProps = {
     onPress?: () => void;
 };
 
-const SettingLink = ({ icon, title, subtitle, rightContent, onPress }: SettingLinkProps) => (
-    <TouchableOpacity activeOpacity={0.7} style={styles.linkRow} onPress={onPress}>
-        <View style={styles.rowCenter}>
-            {icon}
-            <View>
-                <Text style={styles.rowTitle}>{title}</Text>
-                <Text style={styles.rowSubtitle}>{subtitle}</Text>
+const SettingLink = ({ icon, title, subtitle, rightContent, onPress }: SettingLinkProps) => {
+    const { colors } = useTheme();
+    return (
+        <TouchableOpacity activeOpacity={0.7} style={{
+            flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+            paddingHorizontal: 14, paddingVertical: 12,
+            borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border,
+        }} onPress={onPress}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                {icon}
+                <View>
+                    <Text style={{ fontSize: 15, fontWeight: "600", color: colors.text }}>{title}</Text>
+                    <Text style={{ color: colors.textTertiary, fontSize: 13 }}>{subtitle}</Text>
+                </View>
             </View>
+            {rightContent ? rightContent : <Text style={{ color: colors.textMuted, fontSize: 18, fontWeight: "900" }}>›</Text>}
+        </TouchableOpacity>
+    );
+};
+
+const CircleIcon = ({ label, color }: { label: string; color?: string }) => {
+    const { colors } = useTheme();
+    return (
+        <View style={{
+            width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center",
+            backgroundColor: color ? `${color}1a` : colors.bgSubtle,
+        }}>
+            <Text style={{ fontSize: 15, fontWeight: "700", color: color ?? colors.text }}>{label}</Text>
         </View>
-        {rightContent ? rightContent : <Text style={styles.chevronText}>›</Text>}
-    </TouchableOpacity>
-);
+    );
+};
 
-const CircleIcon = ({ label, color }: { label: string; color?: string }) => (
-    <View style={[styles.circleIcon, color ? { backgroundColor: `${color}1a` } : null]}>
-        <Text style={[styles.circleIconText, color ? { color } : null]}>{label}</Text>
-    </View>
-);
-
-const InfoRow = ({ label, value }: { label: string; value: string }) => (
-    <View style={styles.infoRow}>
-        <Text style={styles.infoLabel}>{label}</Text>
-        <Text style={styles.infoValue}>{value}</Text>
-    </View>
-);
+const InfoRow = ({ label, value }: { label: string; value: string }) => {
+    const { colors } = useTheme();
+    return (
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ color: colors.textTertiary, fontSize: 13 }}>{label}</Text>
+            <Text style={{ color: colors.text, fontWeight: "600" }}>{value}</Text>
+        </View>
+    );
+};
 
 function makeOfflineStyles(colors: any) {
     return {
