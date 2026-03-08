@@ -8,11 +8,13 @@ const styles = StyleSheet.create({
         padding: 20,
     },
     card: {
-        backgroundColor: "#ffffff",
+        backgroundColor: "#09090B",
         borderRadius: 18,
         padding: 20,
-        shadowColor: "#0f172a",
-        shadowOpacity: 0.2,
+        borderWidth: 1,
+        borderColor: "#18181B",
+        shadowColor: "#000",
+        shadowOpacity: 0.6,
         shadowRadius: 24,
         shadowOffset: { width: 0, height: 12 },
         elevation: 8,
@@ -23,13 +25,13 @@ const styles = StyleSheet.create({
     title: {
         fontSize: 18,
         fontWeight: "700",
-        color: "#0f172a",
+        color: "#FAFAFA",
     },
     description: {
         marginTop: 6,
         fontSize: 14,
         lineHeight: 20,
-        color: "#475569",
+        color: "#71717A",
     },
     body: {
         marginTop: 4,
@@ -45,12 +47,12 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 16,
         borderWidth: 1,
-        borderColor: "#e2e8f0",
-        backgroundColor: "#f8fafc",
+        borderColor: "#27272A",
+        backgroundColor: "#18181B",
     },
     actionButtonPrimary: {
-        borderColor: "#0ea5e9",
-        backgroundColor: "#0ea5e9",
+        borderColor: "#FAFAFA",
+        backgroundColor: "#FAFAFA",
     },
     actionButtonDanger: {
         borderColor: "#ef4444",
@@ -62,10 +64,10 @@ const styles = StyleSheet.create({
     actionText: {
         fontSize: 14,
         fontWeight: "600",
-        color: "#0f172a",
+        color: "#FAFAFA",
     },
     actionTextOnPrimary: {
-        color: "#ffffff",
+        color: "#050505",
     },
     closeButton: {
         position: "absolute",
@@ -80,7 +82,7 @@ const styles = StyleSheet.create({
     closeText: {
         fontSize: 18,
         fontWeight: "600",
-        color: "#64748b",
+        color: "#71717A",
         lineHeight: 20,
     },
 });

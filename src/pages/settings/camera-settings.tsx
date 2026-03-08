@@ -157,12 +157,12 @@ const localStyles = {
         overflow: "hidden" as const,
     },
     statusOnline: {
-        backgroundColor: "#dcfce7",
-        color: "#166534",
+        backgroundColor: "#14532d",
+        color: "#86efac",
     },
     statusOffline: {
-        backgroundColor: "#fee2e2",
-        color: "#991b1b",
+        backgroundColor: "#2D0A0A",
+        color: "#fca5a5",
     },
     optionsRow: {
         flexDirection: "row" as const,
@@ -173,8 +173,9 @@ const localStyles = {
         paddingVertical: 10,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: "#e5e7eb",
+        borderColor: "#27272A",
         alignItems: "center" as const,
+        backgroundColor: "#0A0A0A",
     },
     optionChipActive: {
         backgroundColor: "#2563eb",
@@ -183,7 +184,7 @@ const localStyles = {
     optionChipText: {
         fontSize: 14,
         fontWeight: "600" as const,
-        color: "#374151",
+        color: "#71717A",
     },
     optionChipTextActive: {
         color: "#fff",
@@ -191,8 +192,8 @@ const localStyles = {
     alwaysOnBadge: {
         fontSize: 12,
         fontWeight: "700" as const,
-        color: "#166534",
-        backgroundColor: "#dcfce7",
+        color: "#86efac",
+        backgroundColor: "#14532d",
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 8,
