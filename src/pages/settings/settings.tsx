@@ -138,10 +138,10 @@ export default function Settings() {
                             />
 
                             <SettingLink
-                                icon={<CircleIcon label="S" color="#475569" />}
-                                title="Security & Privacy"
-                                subtitle="Access logs & permissions"
-                                onPress={() => router.push("/settings/security-privacy")}
+                                icon={<CircleIcon label="+" color="#10B981" />}
+                                title="Add a Device"
+                                subtitle="Set up a new smart lock via Bluetooth"
+                                onPress={() => router.push("/add-device")}
                             />
                         </View>
                     </View>
@@ -224,16 +224,16 @@ const offlineStyles = {
         flexDirection: "row" as const,
         alignItems: "center" as const,
         justifyContent: "space-between" as const,
-        backgroundColor: "#fef2f2",
+        backgroundColor: "#18181B",
         borderWidth: 1,
-        borderColor: "#fecaca",
+        borderColor: "#27272A",
         borderRadius: 10,
         paddingHorizontal: 14,
         paddingVertical: 10,
         marginBottom: 8,
     },
     bannerText: {
-        color: "#991b1b",
+        color: "#A1A1AA",
         fontSize: 13,
         flexShrink: 1,
         marginRight: 12,

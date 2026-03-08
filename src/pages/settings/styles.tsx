@@ -1,9 +1,9 @@
-import {StyleSheet} from "react-native";
+import { StyleSheet } from "react-native";
 
 const styles = StyleSheet.create({
     screen: {
         flex: 1,
-        backgroundColor: "#fff",
+        backgroundColor: "#050505",
     },
     container: {
         paddingHorizontal: 16,
@@ -13,25 +13,25 @@ const styles = StyleSheet.create({
     },
     header: {
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderColor: "#e5e7eb",
+        borderColor: "#18181B",
         paddingBottom: 12,
     },
     title: {
         fontSize: 20,
         fontWeight: "700",
-        color: "#111827",
+        color: "#FAFAFA",
     },
     subtitle: {
         marginTop: 4,
-        color: "#6b7280",
+        color: "#71717A",
         fontSize: 14,
     },
     card: {
         borderWidth: 1,
-        borderColor: "#e5e7eb",
+        borderColor: "#18181B",
         borderRadius: 12,
         padding: 14,
-        backgroundColor: "#fff",
+        backgroundColor: "#09090B",
         gap: 12,
     },
     profileRow: {
@@ -55,14 +55,14 @@ const styles = StyleSheet.create({
     profileName: {
         fontSize: 16,
         fontWeight: "600",
-        color: "#111827",
+        color: "#FAFAFA",
     },
     profileEmail: {
-        color: "#6b7280",
+        color: "#71717A",
         fontSize: 14,
     },
     chevronText: {
-        color: "#9ca3af",
+        color: "#3F3F46",
         fontSize: 18,
         fontWeight: "900",
     },
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
         marginLeft: 4,
         fontSize: 16,
         fontWeight: "700",
-        color: "#111827",
+        color: "#FAFAFA",
     },
     rowBetween: {
         flexDirection: "row",
@@ -90,10 +90,10 @@ const styles = StyleSheet.create({
     rowTitle: {
         fontSize: 15,
         fontWeight: "600",
-        color: "#111827",
+        color: "#FAFAFA",
     },
     rowSubtitle: {
-        color: "#6b7280",
+        color: "#71717A",
         fontSize: 13,
     },
     divide: {
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14,
         paddingVertical: 12,
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: "#e5e7eb",
+        borderBottomColor: "#18181B",
     },
     sectionSpacing: {
         paddingTop: 8,
@@ -122,18 +122,18 @@ const styles = StyleSheet.create({
     },
     badgeOutline: {
         borderWidth: 1,
-        borderColor: "#e5e7eb",
-        color: "#111827",
-        backgroundColor: "#fff",
+        borderColor: "#27272A",
+        color: "#FAFAFA",
+        backgroundColor: "#09090B",
     },
     badgeSolid: {
-        backgroundColor: "#e0f2fe",
-        color: "#075985",
+        backgroundColor: "#172554",
+        color: "#93c5fd",
     },
     progressTrack: {
         height: 8,
         borderRadius: 8,
-        backgroundColor: "#f3f4f6",
+        backgroundColor: "#18181B",
         overflow: "hidden",
     },
     progressFill: {
@@ -155,20 +155,20 @@ const styles = StyleSheet.create({
     },
     buttonOutline: {
         borderWidth: 1,
-        borderColor: "#2563eb",
+        borderColor: "#27272A",
         marginTop: 8,
     },
     buttonOutlineText: {
-        color: "#1d4ed8",
+        color: "#FAFAFA",
         fontWeight: "700",
     },
     buttonGhost: {
         borderWidth: 1,
-        borderColor: "#e5e7eb",
-        backgroundColor: "#fff",
+        borderColor: "#27272A",
+        backgroundColor: "#09090B",
     },
     buttonGhostText: {
-        color: "#b91c1c",
+        color: "#EF4444",
         fontWeight: "700",
     },
     buttonText: {
@@ -180,15 +180,15 @@ const styles = StyleSheet.create({
         alignItems: "center",
     },
     infoLabel: {
-        color: "#6b7280",
+        color: "#71717A",
         fontSize: 13,
     },
     infoValue: {
-        color: "#111827",
+        color: "#FAFAFA",
         fontWeight: "600",
     },
     systemInfo: {
-        backgroundColor: "#f9fafb",
+        backgroundColor: "#0A0A0A",
         gap: 8,
     },
     inputGroup: {
@@ -197,16 +197,17 @@ const styles = StyleSheet.create({
     inputLabel: {
         fontSize: 14,
         fontWeight: "600",
-        color: "#374151",
+        color: "#A1A1AA",
     },
     input: {
         borderWidth: 1,
-        borderColor: "#e5e7eb",
+        borderColor: "#27272A",
         borderRadius: 10,
         paddingVertical: 10,
         paddingHorizontal: 12,
         fontSize: 15,
-        color: "#111827",
+        color: "#FAFAFA",
+        backgroundColor: "#09090B",
     },
     settingToggleRow: {
         flexDirection: "row",
@@ -215,14 +216,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: 14,
         paddingVertical: 12,
         borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: "#e5e7eb",
+        borderBottomColor: "#18181B",
         gap: 12,
     },
     circleIcon: {
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: "#f4f4f5",
+        backgroundColor: "#18181B",
         alignItems: "center",
         justifyContent: "center",
     },

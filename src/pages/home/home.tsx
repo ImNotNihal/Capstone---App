@@ -55,6 +55,9 @@ const METHOD_ICONS: Record<string, string> = {
     face: "face-recognition",
     fingerprint: "fingerprint",
     keypad: "dialpad",
+    fingerprint: "Fingerprint Scanner",
+    keypad: "Keypad Entry",
+    bluetooth: "Bluetooth Proximity",
 };
 
 const ALL_METHODS = ["face", "fingerprint", "keypad"] as const;
@@ -77,6 +80,10 @@ export default function Home() {
     const [isCallActive, setIsCallActive] = useState(false);
     const [isMuted, setIsMuted] = useState(true);
     const [hasStream, setHasStream] = useState(false);
+    
+    // --- Media Controls State ---
+    const [isCallActive, setIsCallActive] = useState(false);
+    const [isMuted, setIsMuted] = useState(true); // Default feed audio to muted
 
     // --- Hardware Mock State ---
     const [batteryLevel] = useState(85);
@@ -86,6 +93,7 @@ export default function Home() {
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const translateY = useRef(new Animated.Value(20)).current;
 
+    // Trigger entrance animations on load
     useEffect(() => {
         if (user) {
             Animated.parallel([
@@ -108,6 +116,7 @@ export default function Home() {
     const [lastEvent, setLastEvent] = useState<{ type: string; timestamp: string } | null>(null);
     const [loadingEvent, setLoadingEvent] = useState(true);
     const [methodsState, setMethodsState] = useState<Record<string, boolean>>({ face: false, fingerprint: false, keypad: false });
+    const [activeMethods, setActiveMethods] = useState<string[]>([]);
     const [loadingMethods, setLoadingMethods] = useState(true);
 
     // --- Animated Interaction Handlers ---
@@ -116,6 +125,18 @@ export default function Home() {
             Animated.timing(lockScale, { toValue: 0.92, duration: 100, useNativeDriver: true }),
             Animated.timing(lockScale, { toValue: 1, duration: 150, useNativeDriver: true })
         ]).start();
+            Animated.timing(lockScale, {
+                toValue: 0.92,
+                duration: 100,
+                useNativeDriver: true,
+            }),
+            Animated.timing(lockScale, {
+                toValue: 1,
+                duration: 150,
+                useNativeDriver: true,
+            })
+        ]).start();
+
         isLocked ? httpUnlock() : httpLock();
     };
 
@@ -204,6 +225,11 @@ export default function Home() {
             {/* COMPACT HEADER */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Front Door</Text>
+            
+            {/* COMPACT HEADER WITH HARDWARE STATUS */}
+            <View style={styles.header}>
+                <Text style={styles.headerTitle}>Front Door</Text>
+                
                 <View style={styles.headerRight}>
                     <View style={styles.statusIcons}>
                         <MaterialCommunityIcons name="wifi" size={15} color="#71717A" style={styles.wifiIcon} />
@@ -212,6 +238,7 @@ export default function Home() {
                             <MaterialCommunityIcons name="battery-80" size={16} color="#71717A" />
                         </View>
                     </View>
+
                     <TouchableOpacity onPress={() => router.push("/settings")}>
                         <MaterialCommunityIcons name="cog-outline" size={24} color="#A1A1AA" />
                     </TouchableOpacity>
@@ -254,6 +281,43 @@ export default function Home() {
                                 color={isCallActive ? "#000" : "#fff"}
                             />
                         </TouchableOpacity>
+                
+                {/* HERO CAMERA FEED */}
+                <View style={styles.cameraHero}>
+                    <CameraFeed />
+                    
+                    <View style={styles.liveOverlay}>
+                        <PulseDot />
+                        <Text style={styles.liveText}>LIVE</Text>
+                    </View>
+
+                    {/* CAMERA MEDIA CONTROLS */}
+                    <View style={styles.cameraControls}>
+                        {/* Speaker Toggle */}
+                        <TouchableOpacity 
+                            style={[styles.overlayButton, !isMuted && styles.overlayButtonActive]} 
+                            onPress={toggleMute}
+                        >
+                            <MaterialCommunityIcons 
+                                name={isMuted ? "volume-off" : "volume-high"} 
+                                size={22} 
+                                color={!isMuted ? "#000" : "#fff"} 
+                            />
+                        </TouchableOpacity>
+
+                        {/* Microphone Toggle */}
+                        <TouchableOpacity 
+                            style={[styles.overlayButton, isCallActive && styles.overlayButtonActive]} 
+                            onPress={toggleCall}
+                        >
+                            <MaterialCommunityIcons 
+                                name={isCallActive ? "microphone" : "microphone-off"} 
+                                size={22} 
+                                color={isCallActive ? "#000" : "#fff"} 
+                            />
+                        </TouchableOpacity>
+                        
+                        {/* Fullscreen Button */}
                         <TouchableOpacity style={styles.overlayButton}>
                             <MaterialCommunityIcons name="fullscreen" size={22} color="#fff" />
                         </TouchableOpacity>
@@ -265,6 +329,8 @@ export default function Home() {
                     <Animated.View style={{ transform: [{ scale: lockScale }] }}>
                         <TouchableOpacity
                             style={[styles.sleekLockPill, isLocked ? styles.pillLocked : styles.pillUnlocked]}
+                        <TouchableOpacity 
+                            style={[styles.sleekLockPill, isLocked ? styles.pillLocked : styles.pillUnlocked]} 
                             onPress={handleLockToggle}
                             activeOpacity={1}
                         >
@@ -273,6 +339,10 @@ export default function Home() {
                                     name={isLocked ? "lock" : "lock-open-variant"}
                                     size={20}
                                     color={isLocked ? "#10B981" : "#EF4444"}
+                                <MaterialCommunityIcons 
+                                    name={isLocked ? "lock" : "lock-open-variant"} 
+                                    size={20} 
+                                    color={isLocked ? "#10B981" : "#EF4444"} 
                                 />
                             </View>
                             <Text style={styles.sleekLockText}>
@@ -293,6 +363,16 @@ export default function Home() {
                                 name={lastEvent ? (EVENT_ICONS[lastEvent.type] || EVENT_ICONS.DEFAULT) : "clock-outline"}
                                 size={22}
                                 color="#A1A1AA"
+                {/* ANIMATED ACTIVITY LOG */}
+                <Animated.View style={[styles.activitySection, { opacity: fadeAnim, transform: [{ translateY }] }]}>
+                    <Text style={styles.sectionTitle}>Recent Activity</Text>
+                    
+                    <View style={styles.activityCard}>
+                        <View style={styles.activityIconWrapper}>
+                            <MaterialCommunityIcons 
+                                name={lastEvent ? (EVENT_ICONS[lastEvent.type] || EVENT_ICONS.DEFAULT) : "clock-outline"} 
+                                size={22} 
+                                color="#A1A1AA" 
                             />
                         </View>
                         <View style={styles.activityTextWrapper}>
@@ -331,6 +411,23 @@ export default function Home() {
                         })}
                     </View>
 
+                    <Text style={styles.sectionTitle}>Active Access Methods</Text>
+                    
+                    <View style={styles.activityCard}>
+                        <View style={styles.activityIconWrapper}>
+                            <MaterialCommunityIcons name="shield-check-outline" size={22} color="#A1A1AA" />
+                        </View>
+                        <View style={styles.activityTextWrapper}>
+                            <Text style={styles.activityTitle}>
+                                {loadingMethods 
+                                    ? "Loading..." 
+                                    : activeMethods.length > 0 
+                                        ? activeMethods.map(m => METHOD_LABELS[m] || m).join(", ") 
+                                        : "None configured"}
+                            </Text>
+                            <Text style={styles.activityTime}>Manage in Settings</Text>
+                        </View>
+                    </View>
                 </Animated.View>
 
             </ScrollView>
@@ -356,6 +453,12 @@ const PulseDot = () => {
 
 /* --- Camera Feed Sub-Component --- */
 const CameraFeed = ({ onStreamChange }: { onStreamChange: (v: boolean) => void }) => {
+
+    return <Animated.View style={[styles.liveDot, { opacity: opacityAnim }]} />;
+};
+
+/* --- Camera Feed Sub-Component --- */
+const CameraFeed = () => {
     const { cameraBaseUrl, isWebBrowser, authToken } = useContext(AppContext);
     const [source, setSource] = useState("");
     const [webViewKey, setWebViewKey] = useState(0);
@@ -375,6 +478,7 @@ const CameraFeed = ({ onStreamChange }: { onStreamChange: (v: boolean) => void }
                 setSource("");
                 onStreamChange(false);
             };
+            return () => setSource("");
         }, [cameraBaseUrl])
     );
 
@@ -404,6 +508,8 @@ const CameraFeed = ({ onStreamChange }: { onStreamChange: (v: boolean) => void }
                     <MaterialCommunityIcons name="video-off-outline" size={36} color="#3F3F46" />
                     <Text style={styles.videoText}>Camera offline</Text>
                     <Text style={styles.videoSubText}>No stream available</Text>
+                    <Text style={styles.videoText}>Camera sleeping</Text>
+                    <Text style={styles.videoSubText}>Waiting for motion</Text>
                 </View>
             )}
         </View>
@@ -469,11 +575,59 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
+    },
+    batteryContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    batteryText: {
+        color: '#71717A',
+        fontSize: 11,
+        fontWeight: '600',
+        marginRight: 2,
+    },
+    cameraHero: {
+        width: '100%',
+        aspectRatio: 16 / 9, 
+        backgroundColor: '#09090B',
+        position: 'relative',
+        borderBottomWidth: 1,
+        borderColor: '#18181B',
+    },
+    videoPlaceholder: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     videoText: {
         color: '#A1A1AA',
         marginTop: 8,
         fontSize: 14,
         fontWeight: '500',
+    },
+    videoSubText: {
+        color: '#52525B',
+        fontSize: 12,
+        marginTop: 2,
+    },
+    liveOverlay: {
+        position: 'absolute',
+        top: 16,
+        left: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 8,
+    },
+    liveDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#EF4444',
+        marginRight: 6,
+    },
     },
     videoSubText: {
         color: '#52525B',
@@ -569,6 +723,7 @@ const styles = StyleSheet.create({
     sectionTitle: {
         color: '#71717A',
         fontSize: 12,
+        fontSize: 13,
         fontWeight: '600',
         textTransform: 'uppercase',
         letterSpacing: 1,
@@ -600,6 +755,7 @@ const styles = StyleSheet.create({
     activityTitle: {
         color: '#E4E4E7',
         fontSize: 14,
+        fontSize: 15,
         fontWeight: '500',
     },
     activityTime: {
@@ -648,5 +804,7 @@ const styles = StyleSheet.create({
     methodStatus: {
         fontSize: 11,
         fontWeight: '500',
+        fontSize: 13,
+        marginTop: 4,
     },
 });

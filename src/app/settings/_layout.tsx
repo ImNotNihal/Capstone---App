@@ -30,6 +30,22 @@ export default function SettingsLayout() {
             <Stack.Screen name="security-privacy" />
             <Stack.Screen name="device-config" />
             <Stack.Screen name="camera-settings" />
+const sharedScreenOptions = {
+    headerShown: true,
+    headerStyle: { backgroundColor: "#050505" },
+    headerShadowVisible: false,
+    title: "",
+    headerLeft: () => <BackButton />,
+};
+
+export default function SettingsLayout() {
+    return (
+        <Stack>
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="manage-users" options={sharedScreenOptions} />
+            <Stack.Screen name="security-privacy" options={sharedScreenOptions} />
+            <Stack.Screen name="device-config" options={sharedScreenOptions} />
+            <Stack.Screen name="camera-settings" options={sharedScreenOptions} />
         </Stack>
     );
 }
@@ -42,6 +58,7 @@ const styles = StyleSheet.create({
     backText: {
         fontSize: 16,
         color: "#2563eb",
+        color: "#FAFAFA",
         fontWeight: "600",
     },
 });

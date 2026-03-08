@@ -141,11 +141,11 @@ export default function DeviceConfig() {
             >
                 {/* Discovered devices */}
                 <View style={{marginTop: 8}}>
-                    <Text style={{fontSize: 16, fontWeight: "600", marginBottom: 8}}>
+                    <Text style={{fontSize: 16, fontWeight: "600", marginBottom: 8, color: "#FAFAFA"}}>
                         Available Devices
                     </Text>
                     {allDevices.length === 0 ? (
-                        <Text style={{color: "#6b7280"}}>No devices found yet.</Text>
+                        <Text style={{color: "#71717A"}}>No devices found yet.</Text>
                     ) : (
                         allDevices
                             .filter((device) => deviceHasName(device))
@@ -246,18 +246,19 @@ const BluetoothDeviceCard = ({device, isConnected, disconnectFromDevice, connect
                 padding: 12,
                 marginBottom: 8,
                 borderWidth: 1,
-                borderColor: "#e4e4e7",
+                borderColor: "#27272A",
                 borderRadius: 10,
                 flexDirection: "row",
                 alignItems: "center",
                 justifyContent: "space-between",
+                backgroundColor: "#0A0A0A",
             }}
         >
             <View style={{flexShrink: 1}}>
-                <Text style={{fontWeight: "600"}}>
+                <Text style={{fontWeight: "600", color: "#FAFAFA"}}>
                     {device.name || device.localName || "Unnamed device"}
                 </Text>
-                <Text style={{color: "#6b7280"}} numberOfLines={1}>
+                <Text style={{color: "#71717A"}} numberOfLines={1}>
                     {device.id}
                 </Text>
             </View>

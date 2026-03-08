@@ -228,6 +228,7 @@ export default function Events() {
             <Animated.ScrollView
                 contentContainerStyle={styles.listContent}
                 style={{ opacity: fadeAnim, transform: [{ translateY }], zIndex: 1 }}
+                style={{ opacity: fadeAnim, transform: [{ translateY }] }}
                 showsVerticalScrollIndicator={false}
             >
                 {loadingEvents && (
@@ -387,6 +388,16 @@ const styles = StyleSheet.create({
         paddingBottom: 16,
         gap: 8,
     },
+    filterContainer: {
+        zIndex: 1,
+        elevation: 1,
+    },
+    filterScroll: {
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        paddingBottom: 16,
+        gap: 8,
+    },
     filterPill: {
         paddingVertical: 8,
         paddingHorizontal: 16,
@@ -535,6 +546,80 @@ const styles = StyleSheet.create({
         borderColor: "#1F2937",
         borderRadius: 24,
         padding: 24,
+    },
+    calendarHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 20,
+    },
+    calendarTitle: {
+        color: "#FAFAFA",
+        fontSize: 18,
+        fontWeight: "bold",
+    },
+    calNavBtn: {
+        padding: 4,
+    },
+    calWeekdays: {
+        flexDirection: "row",
+        marginBottom: 12,
+    },
+    calDayWrapper: {
+        width: "14.28%",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    calWeekdayText: {
+        color: "#71717A",
+        fontSize: 13,
+        fontWeight: "600",
+    },
+    calendarGrid: {
+        flexDirection: "row",
+        flexWrap: "wrap",
+        rowGap: 12,
+    },
+    calDayBox: {
+        width: 38,
+        height: 38,
+        justifyContent: "center",
+        alignItems: "center",
+        borderRadius: 19,
+    },
+    calDayActive: {
+        backgroundColor: "#10B981",
+    },
+    calDayText: {
+        color: "#FAFAFA",
+        fontSize: 15,
+        fontWeight: "500",
+    },
+    calDayTextToday: {
+        color: "#3B82F6",
+        fontWeight: "bold",
+    },
+    calDayTextActive: {
+        color: "#050505",
+        fontWeight: "bold",
+    },
+    calendarClearBtn: {
+        marginTop: 24,
+        alignItems: "center",
+        paddingVertical: 14,
+        backgroundColor: "#1F2937",
+        borderRadius: 12,
+    },
+    calendarClearText: {
+        color: "#FAFAFA",
+        fontSize: 15,
+        fontWeight: "600",
+    },
+    calendarCloseBtn: {
+        marginTop: 12,
+        alignItems: "center",
+        paddingVertical: 14,
+    },
     },
     calendarHeader: {
         flexDirection: "row",

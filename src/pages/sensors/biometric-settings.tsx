@@ -10,6 +10,11 @@ import {
     Animated,
     Easing,
     Modal,
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import React, { useState } from "react";
+import {
+    Alert,
     Platform,
     SafeAreaView,
     ScrollView,
@@ -186,6 +191,56 @@ export default function BiometricSettings() {
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" />
 
+    owner: string;
+    dateAdded: string;
+};
+
+export default function BiometricSettings() {
+    const router = useRouter();
+
+    const [prints, setPrints] = useState<FingerprintProfile[]>([]);
+
+    const handleAddPrint = () => {
+        const uniqueId = `print_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        const newPrint: FingerprintProfile = {
+            id: uniqueId,
+            label: `Fingerprint ${prints.length + 1}`,
+            owner: "Current User",
+            dateAdded: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        };
+        setPrints(prev => [...prev, newPrint]);
+    };
+
+    const handleRemovePrint = (id: string, label: string, owner: string) => {
+        // FIXED: Handle Web Browser popup limits vs Native Phone alerts
+        if (Platform.OS === 'web') {
+            const confirmed = window.confirm(`Are you sure you want to delete ${owner}'s ${label}?`);
+            if (confirmed) {
+                setPrints(currentPrints => currentPrints.filter(p => p.id !== id));
+            }
+        } else {
+            Alert.alert(
+                "Remove Fingerprint",
+                `Are you sure you want to delete ${owner}'s ${label}?`,
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { 
+                        text: "Delete", 
+                        style: "destructive",
+                        onPress: () => {
+                            setPrints(currentPrints => currentPrints.filter(p => p.id !== id));
+                        } 
+                    }
+                ],
+                { cancelable: true }
+            );
+        }
+    };
+
+    return (
+        <SafeAreaView style={styles.container}>
+            <StatusBar barStyle="light-content" />
+            
             {/* HEADER */}
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
@@ -202,6 +257,19 @@ export default function BiometricSettings() {
             >
                 {/* ADD NEW PRINT */}
                 <TouchableOpacity style={styles.registerCard} activeOpacity={0.7} onPress={startEnrollment}>
+            {/* keyboardShouldPersistTaps="always" guarantees taps bypass the scroll listener entirely */}
+            <ScrollView 
+                contentContainerStyle={styles.scrollContent} 
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="always"
+            >
+                
+                {/* REGISTER NEW PRINT */}
+                <TouchableOpacity 
+                    style={styles.registerCard} 
+                    activeOpacity={0.7} 
+                    onPress={handleAddPrint}
+                >
                     <View style={styles.registerIconWrapper}>
                         <MaterialCommunityIcons name="fingerprint" size={32} color="#10B981" />
                     </View>
@@ -219,6 +287,8 @@ export default function BiometricSettings() {
                         <ActivityIndicator color="#FAFAFA" />
                     </View>
                 ) : prints.length === 0 ? (
+                {/* FINGERPRINT LIST OR EMPTY STATE */}
+                {prints.length === 0 ? (
                     <View style={styles.emptyState}>
                         <Text style={styles.emptyStateText}>No fingerprints registered</Text>
                     </View>
@@ -245,11 +315,24 @@ export default function BiometricSettings() {
                                     <MaterialCommunityIcons name="minus-circle-outline" size={26} color="#EF4444" />
                                 </TouchableOpacity>
                             )}
+                                    <Text style={styles.printOwnerText}>{print.owner} • {print.dateAdded}</Text>
+                                </View>
+                            </View>
+
+                            <TouchableOpacity 
+                                onPress={() => handleRemovePrint(print.id, print.label, print.owner)}
+                                style={styles.deleteBtn}
+                                activeOpacity={0.6}
+                            >
+                                <MaterialCommunityIcons name="minus-circle-outline" size={26} color="#EF4444" />
+                            </TouchableOpacity>
                         </View>
                     ))
                 )}
 
                 <Text style={styles.sectionLabel}>Hardware Security</Text>
+
+                {/* SECURITY CONFIG */}
                 <View style={styles.configContainer}>
                     <View style={styles.configRow}>
                         <View style={{ flex: 1 }}>
@@ -353,6 +436,8 @@ export default function BiometricSettings() {
                     </View>
                 </View>
             </Modal>
+
+            </ScrollView>
         </SafeAreaView>
     );
 }
@@ -409,4 +494,55 @@ const styles = StyleSheet.create({
     scanCenter: { width: 80, height: 80, borderRadius: 40, backgroundColor: "#10B98115", justifyContent: "center", alignItems: "center" },
     scanHint: { color: "#71717A", fontSize: 14, textAlign: "center", marginBottom: 16 },
     successIcon: { alignItems: "center", justifyContent: "center", paddingVertical: 24 },
+});
+    headerTitle: { color: "#FAFAFA", fontSize: 18, fontWeight: "bold" },
+    backButton: { padding: 12 },
+    scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
+    sectionLabel: { color: "#71717A", fontSize: 13, fontWeight: "bold", textTransform: "uppercase", marginBottom: 16, marginTop: 32 },
+    
+    // Register Card
+    registerCard: { 
+        width: '100%',
+        backgroundColor: "#10B98110", 
+        borderRadius: 24, 
+        padding: 20, 
+        flexDirection: 'row', 
+        alignItems: 'center', 
+        borderWidth: 1, 
+        borderColor: '#10B98130',
+        zIndex: 10
+    },
+    registerIconWrapper: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#10B98120', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+    registerTitle: { color: "#10B981", fontSize: 18, fontWeight: "bold" },
+    registerDesc: { color: "#10B98180", fontSize: 13, marginTop: 2 },
+
+    // Empty State
+    emptyState: { padding: 24, alignItems: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: '#27272A', borderRadius: 20 },
+    emptyStateText: { color: '#3F3F46', fontSize: 14, fontWeight: '500' },
+
+    // Print Cards
+    printCard: { 
+        width: '100%',
+        backgroundColor: "#09090B", 
+        borderRadius: 20, 
+        padding: 16, 
+        flexDirection: 'row', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#18181B',
+        marginBottom: 12,
+        zIndex: 5
+    },
+    printInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+    printIconSmall: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#18181B', justifyContent: 'center', alignItems: 'center' },
+    printLabelText: { color: "#FAFAFA", fontSize: 16, fontWeight: "600" },
+    printOwnerText: { color: "#71717A", fontSize: 12, marginTop: 2 },
+    deleteBtn: { padding: 14, marginLeft: 8, zIndex: 10 },
+
+    // Config Section
+    configContainer: { backgroundColor: "#09090B", borderRadius: 24, padding: 20, borderWidth: 1, borderColor: '#18181B' },
+    configRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    configTitle: { color: "#FAFAFA", fontSize: 15, fontWeight: "bold" },
+    configDesc: { color: "#71717A", fontSize: 12, marginTop: 4, paddingRight: 30, lineHeight: 18 }
 });
