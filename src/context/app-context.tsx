@@ -119,15 +119,38 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return headers;
     }, [authToken]);
 
-    const httpLock = () => {
-        if (!deviceId) return;
-        setIsLocked(true); // optimistic update
-        return fetchWithTimeout(`${base_url}send-command/${deviceId}/LOCK`, { method: "POST", headers: authHeaders() })
-            .catch(e => {
-                setIsLocked(false); // revert on failure
-                console.warn("Lock command failed:", e);
-            });
-    };
+    const httpLock = useCallback(async () => {
+    // 1. Validation: Prevent execution if the user isn't logged in or has no device
+    if (!deviceId || !authToken) {
+        console.warn("[AppContext] Lock aborted: Missing deviceId or authToken");
+        return;
+    }
+
+    setIsLocked(true); // Optimistic UI update
+
+    try {
+        // 2. Routing: Use the global API_BASE_URL
+        const url = `${API_BASE_URL}send-command/${deviceId}/LOCK`;
+        
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {
+                ...authHeaders(), // Must include 'Authorization': 'Bearer <token>'
+                "Content-Type": "application/json",
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server responded with ${response.status}`);
+        }
+
+        console.log("[AppContext] Lock command sent successfully");
+        return response;
+    } catch (e) {
+        setIsLocked(false); // Revert UI state on network or server failure
+        console.error("[AppContext] Lock command failed:", e);
+    }
+}, [deviceId, authToken, authHeaders]);
 
     const httpUnlock = () => {
         if (!deviceId) return;
