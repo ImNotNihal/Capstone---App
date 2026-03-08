@@ -1,5 +1,5 @@
 import { StyleSheet, View } from "react-native";
-import Sensors from "../pages/sensors/sensors";
+import Sensors from "../../pages/sensors/sensors";
 
 export default function SensorsScreen() {
     return (
