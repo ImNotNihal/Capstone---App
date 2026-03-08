@@ -1,4 +1,4 @@
-import styles from '@/src/pages/settings/styles'; // Importing your shared styles!
+import styles from '@/src/pages/settings/styles';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -15,7 +15,7 @@ export default function AddDeviceScreen() {
 
     return (
         <SafeAreaView style={styles.screen}>
-            <View style={styles.container}>
+            <View style={[styles.container, styles.flex1]}>
                 <View style={styles.header}>
                     <Text style={styles.title}>Add a New Device</Text>
                     <Text style={styles.subtitle}>Step {step} of 4</Text>
@@ -42,12 +42,14 @@ export default function AddDeviceScreen() {
                                 <TextInput 
                                     style={styles.input} 
                                     placeholder="Wi-Fi Network Name" 
+                                    placeholderTextColor="#71717A"
                                     value={wifiNetwork}
                                     onChangeText={setWifiNetwork}
                                 />
                                 <TextInput 
                                     style={styles.input} 
                                     placeholder="Password" 
+                                    placeholderTextColor="#71717A"
                                     secureTextEntry
                                     value={wifiPassword}
                                     onChangeText={setWifiPassword}
@@ -65,6 +67,7 @@ export default function AddDeviceScreen() {
                             <TextInput 
                                 style={styles.input} 
                                 placeholder="Device Name" 
+                                placeholderTextColor="#71717A"
                                 value={deviceName}
                                 onChangeText={setDeviceName}
                             />
@@ -82,11 +85,11 @@ export default function AddDeviceScreen() {
                     )}
                 </View>
 
-                {/* Footer Buttons using existing shared styles */}
+                {/* Footer Buttons */}
                 <View style={styles.footer}>
                     {step > 1 && step < 4 ? (
                         <TouchableOpacity style={[styles.button, styles.buttonGhost, styles.flex1]} onPress={prevStep}>
-                            <Text style={styles.buttonText}>Back</Text>
+                            <Text style={[styles.buttonText, styles.buttonGhostText]}>Back</Text>
                         </TouchableOpacity>
                     ) : (
                         <View style={styles.flex1} />

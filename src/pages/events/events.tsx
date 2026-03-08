@@ -13,8 +13,8 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import { AppContext } from "../../context/app-context";
 import { API_BASE_URL } from "../../config";
+import { AppContext } from "../../context/app-context";
 import SigninForm from "../settings/signInForm";
 
 type EventCategory = "doorbell" | "access" | "motion";
@@ -31,15 +31,15 @@ type EventItem = {
 };
 
 const EVENT_MAP: Record<string, { category: EventCategory; title: string; icon: string; tint: string }> = {
-    lock:           { category: "access",   title: "Door Locked",         icon: "lock",                  tint: "#10B981" },
-    unlock:         { category: "access",   title: "Door Unlocked",       icon: "lock-open",             tint: "#10B981" },
-    motion:         { category: "motion",   title: "Motion Detected",     icon: "walk",                  tint: "#8B5CF6" },
-    doorbell:       { category: "doorbell", title: "Doorbell Rung",       icon: "bell-ring",             tint: "#F59E0B" },
-    failed_access:  { category: "doorbell", title: "Failed Access",       icon: "shield-alert-outline",  tint: "#EF4444" },
-    face:           { category: "access",   title: "Face Unlock",         icon: "face-recognition",      tint: "#10B981" },
-    fingerprint:    { category: "access",   title: "Fingerprint Unlock",  icon: "fingerprint",           tint: "#10B981" },
-    keypad:         { category: "access",   title: "Keypad Unlock",       icon: "dialpad",               tint: "#F59E0B" },
-    bluetooth:      { category: "access",   title: "Bluetooth Unlock",    icon: "bluetooth",             tint: "#3B82F6" },
+    lock:          { category: "access",   title: "Door Locked",        icon: "lock",                  tint: "#10B981" },
+    unlock:        { category: "access",   title: "Door Unlocked",      icon: "lock-open",             tint: "#10B981" },
+    motion:        { category: "motion",   title: "Motion Detected",    icon: "walk",                  tint: "#8B5CF6" },
+    doorbell:      { category: "doorbell", title: "Doorbell Rung",      icon: "bell-ring",             tint: "#F59E0B" },
+    failed_access: { category: "doorbell", title: "Failed Access",      icon: "shield-alert-outline",  tint: "#EF4444" },
+    face:          { category: "access",   title: "Face Unlock",        icon: "face-recognition",      tint: "#10B981" },
+    fingerprint:   { category: "access",   title: "Fingerprint Unlock", icon: "fingerprint",           tint: "#10B981" },
+    keypad:        { category: "access",   title: "Keypad Unlock",      icon: "dialpad",               tint: "#F59E0B" },
+    bluetooth:     { category: "access",   title: "Bluetooth Unlock",   icon: "bluetooth",             tint: "#3B82F6" },
 };
 
 const DEFAULT_EVENT = { category: "access" as EventCategory, title: "Event", icon: "bell-outline", tint: "#71717A" };
@@ -78,11 +78,11 @@ export default function Events() {
     const [currentMonth,   setCurrentMonth]   = useState(new Date().getMonth());
     const [currentYear,    setCurrentYear]    = useState(new Date().getFullYear());
 
-    const [events,        setEvents]        = useState<EventItem[]>([]);
+    const [events,         setEvents]         = useState<EventItem[]>([]);
     const [loadingEvents, setLoadingEvents] = useState(false);
     const [eventsError,   setEventsError]   = useState<string | null>(null);
 
-    const fadeAnim  = useRef(new Animated.Value(0)).current;
+    const fadeAnim   = useRef(new Animated.Value(0)).current;
     const translateY = useRef(new Animated.Value(20)).current;
 
     useEffect(() => {
@@ -92,7 +92,7 @@ export default function Events() {
                 Animated.timing(translateY, { toValue: 0, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
             ]).start();
         }
-    }, [user]);
+    }, [user, fadeAnim, translateY]);
 
     const fetchEvents = useCallback(async () => {
         if (!authToken || !deviceId) return;
@@ -181,6 +181,11 @@ export default function Events() {
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="#050505" />
 
+            {/* PAGE TITLE */}
+            <View style={styles.titleContainer}>
+                <Text style={styles.pageTitle}>Activity</Text>
+            </View>
+
             {/* FILTER PILLS */}
             <View style={styles.filterContainer}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScroll}>
@@ -222,7 +227,7 @@ export default function Events() {
             {/* EVENT LIST */}
             <Animated.ScrollView
                 contentContainerStyle={styles.listContent}
-                style={{ opacity: fadeAnim, transform: [{ translateY }] }}
+                style={{ opacity: fadeAnim, transform: [{ translateY }], zIndex: 1 }}
                 showsVerticalScrollIndicator={false}
             >
                 {loadingEvents && (
@@ -362,9 +367,19 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         padding: 24,
     },
+    titleContainer: {
+        paddingHorizontal: 20,
+        paddingTop: 16,
+        paddingBottom: 4,
+    },
+    pageTitle: {
+        color: "#FAFAFA",
+        fontSize: 28,
+        fontWeight: "700",
+    },
     filterContainer: {
-        zIndex: 1,
-        elevation: 1,
+        zIndex: 10,
+        elevation: 10,
     },
     filterScroll: {
         paddingHorizontal: 20,

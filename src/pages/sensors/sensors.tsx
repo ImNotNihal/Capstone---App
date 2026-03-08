@@ -1,6 +1,9 @@
+import { API_BASE_URL } from "@/src/config";
+import { AppContext } from "@/src/context/app-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
     Animated,
     Dimensions,
@@ -18,9 +21,10 @@ const COLUMN_WIDTH = (width - 52) / 2;
 
 export default function Sensors() {
     const router = useRouter();
-    const [isLocked, setIsLocked] = useState(true);
+    const { isLocked, httpLock, httpUnlock, authToken, deviceId } = useContext(AppContext);
     const [motionEnabled, setMotionEnabled] = useState(true);
-    
+    const [loadingMotion, setLoadingMotion] = useState(false);
+
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
     useEffect(() => {
@@ -29,37 +33,85 @@ export default function Sensors() {
             duration: 500,
             useNativeDriver: true,
         }).start();
-    }, []);
+    }, [fadeAnim]);
+
+    const authHeaders = useCallback(() => {
+        const h: Record<string, string> = { "Content-Type": "application/json" };
+        if (authToken) h["Authorization"] = `Bearer ${authToken}`;
+        return h;
+    }, [authToken]);
+
+    const fetchSettings = useCallback(async () => {
+        if (!authToken || !deviceId) return;
+        try {
+            const res = await fetch(`${API_BASE_URL}settings/${deviceId}`, {
+                headers: authHeaders(),
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (typeof data.cameraEnabled === "boolean") {
+                setMotionEnabled(data.cameraEnabled);
+            }
+        } catch {}
+    }, [authToken, deviceId, authHeaders]);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchSettings();
+        }, [fetchSettings])
+    );
+
+    const handleLockToggle = () => {
+        if (isLocked) {
+            httpUnlock();
+        } else {
+            httpLock();
+        }
+    };
+
+    const handleMotionToggle = async (val: boolean) => {
+        setMotionEnabled(val);
+        setLoadingMotion(true);
+        try {
+            await fetch(`${API_BASE_URL}settings/${deviceId}`, {
+                method: "PUT",
+                headers: authHeaders(),
+                body: JSON.stringify({ cameraEnabled: val }),
+            });
+        } catch {
+            setMotionEnabled(!val);
+        } finally {
+            setLoadingMotion(false);
+        }
+    };
 
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" />
-            
-            {/* CLEAN HEADER: Title only */}
+
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Access Control</Text>
             </View>
 
-            {/* Ghost area for layout stability */}
             <View style={styles.ghostContainer} />
 
-            <Animated.ScrollView 
+            <Animated.ScrollView
                 style={{ opacity: fadeAnim }}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
             >
                 {/* PRIMARY STATUS: FRONT DOOR */}
-                <TouchableOpacity 
-                    style={[styles.mainCard, !isLocked && styles.mainCardUnlocked]} 
-                    onPress={() => setIsLocked(!isLocked)}
+                <TouchableOpacity
+                    style={[styles.mainCard, !isLocked && styles.mainCardUnlocked]}
+                    onPress={handleLockToggle}
                     activeOpacity={0.9}
                 >
                     <View style={styles.mainCardHeader}>
                         <View style={[styles.mainIconWrapper, { backgroundColor: isLocked ? "#10B98120" : "#EF444420" }]}>
-                            <MaterialCommunityIcons 
-                                name={isLocked ? "lock" : "lock-open"} 
-                                size={32} 
-                                color={isLocked ? "#10B981" : "#EF4444"} 
+                            <MaterialCommunityIcons
+                                name={isLocked ? "lock" : "lock-open"}
+                                size={32}
+                                color={isLocked ? "#10B981" : "#EF4444"}
                             />
                         </View>
                         <View style={styles.batteryBadge}>
@@ -80,19 +132,19 @@ export default function Sensors() {
 
                 <Text style={styles.sectionLabel}>Configuration</Text>
 
-                {/* CONFIGURATION GRID */}
                 <View style={styles.grid}>
                     {/* Motion Detection */}
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         style={styles.configCard}
                         onPress={() => router.push("/sensors/motion-settings")}
                         activeOpacity={0.7}
                     >
                         <View style={styles.configHeader}>
                             <MaterialCommunityIcons name="run-fast" size={24} color="#8B5CF6" />
-                            <Switch 
-                                value={motionEnabled} 
-                                onValueChange={(val) => setMotionEnabled(val)}
+                            <Switch
+                                value={motionEnabled}
+                                onValueChange={handleMotionToggle}
+                                disabled={loadingMotion}
                                 trackColor={{ false: "#27272A", true: "#8B5CF650" }}
                                 thumbColor={motionEnabled ? "#8B5CF6" : "#71717A"}
                             />
@@ -127,7 +179,7 @@ export default function Sensors() {
                         <MaterialCommunityIcons name="face-recognition" size={24} color="#3B82F6" />
                         <View>
                             <Text style={styles.configTitle}>Face ID</Text>
-                            <Text style={styles.configDesc}>4 Profiles</Text>
+                            <Text style={styles.configDesc}>Profiles</Text>
                         </View>
                         <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
                     </TouchableOpacity>
@@ -164,8 +216,8 @@ const styles = StyleSheet.create({
     },
     headerTitle: {
         color: "#FAFAFA",
-        fontSize: 32,
-        fontWeight: "bold",
+        fontSize: 28,
+        fontWeight: "700",
     },
     ghostContainer: {
         height: 10,
@@ -175,9 +227,11 @@ const styles = StyleSheet.create({
         paddingBottom: 40,
     },
     sectionLabel: {
-        color: "#FAFAFA",
-        fontSize: 18,
+        color: "#71717A",
+        fontSize: 12,
         fontWeight: "600",
+        textTransform: "uppercase",
+        letterSpacing: 1,
         marginTop: 32,
         marginBottom: 16,
     },
@@ -215,7 +269,7 @@ const styles = StyleSheet.create({
     batteryText: {
         color: "#A1A1AA",
         fontSize: 12,
-        fontWeight: "bold",
+        fontWeight: "600",
     },
     mainCardBody: {
         marginTop: 20,

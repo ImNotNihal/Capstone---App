@@ -119,6 +119,13 @@ export default function Settings() {
                             />
 
                             <SettingLink
+                                icon={<CircleIcon label="V" color="#f97316" />}
+                                title="Camera Settings"
+                                subtitle="Video quality & recording"
+                                onPress={() => router.push("/settings/camera-settings")}
+                            />
+
+                            <SettingLink
                                 icon={<CircleIcon label="W" color="#0ea5e9" />}
                                 title="Device Configuration"
                                 subtitle="Wi-Fi, Bluetooth, and firmware"

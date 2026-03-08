@@ -21,7 +21,10 @@ const sharedScreenOptions = {
 export default function SettingsLayout() {
     return (
         <Stack>
+            {/* Main settings page — no header (it has its own) */}
             <Stack.Screen name="index" options={{ headerShown: false }} />
+            
+            {/* Sub-pages — show back button header */}
             <Stack.Screen name="manage-users" options={sharedScreenOptions} />
             <Stack.Screen name="security-privacy" options={sharedScreenOptions} />
             <Stack.Screen name="device-config" options={sharedScreenOptions} />
@@ -37,7 +40,7 @@ const styles = StyleSheet.create({
     },
     backText: {
         fontSize: 16,
-        color: "#FAFAFA",
+        color: "#FAFAFA", // Removed the duplicate blue color
         fontWeight: "600",
     },
 });

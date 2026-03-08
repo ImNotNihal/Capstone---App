@@ -1,7 +1,11 @@
+import { API_BASE_URL } from "@/src/config";
+import { AppContext } from "@/src/context/app-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useCallback, useContext, useRef, useState } from "react";
 import {
+    ActivityIndicator,
     Alert,
     Animated,
     Modal,
@@ -15,17 +19,18 @@ import {
     View
 } from "react-native";
 
-type PinType = { id: string; label: string; code: string; strength: string };
+type PinType = { id: string; label: string; code: string; strength: string; pinType?: string };
 type OtpType = { id: string; label: string; code: string; expires: string };
 
 export default function PinSettings() {
     const router = useRouter();
-    
+    const { authToken, deviceId } = useContext(AppContext);
+
     // UI States
     const [isAuthVisible, setIsAuthVisible] = useState(false);
     const [isPinVisible, setIsPinVisible] = useState(false);
     const [isAddPinVisible, setIsAddPinVisible] = useState(false);
-    
+
     // Form States
     const [password, setPassword] = useState("");
     const [newPinLabel, setNewPinLabel] = useState("");
@@ -33,12 +38,52 @@ export default function PinSettings() {
     const [pendingAction, setPendingAction] = useState<"view" | null>(null);
     const [errorMessage, setErrorMessage] = useState("");
 
+    // API & Data States
+    const [pins, setPins] = useState<PinType[]>([]);
+    const [otpCodes, setOtpCodes] = useState<OtpType[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
+
     // Animation Ref for the Shake Effect
     const shakeAnim = useRef(new Animated.Value(0)).current;
 
-    // Empty arrays for real data usage
-    const [pins, setPins] = useState<PinType[]>([]);
-    const [otpCodes, setOtpCodes] = useState<OtpType[]>([]);
+    // --- API FUNCTIONS ---
+
+    const authHeaders = useCallback(() => {
+        const h: Record<string, string> = { "Content-Type": "application/json" };
+        if (authToken) h["Authorization"] = `Bearer ${authToken}`;
+        return h;
+    }, [authToken]);
+
+    const fetchPins = useCallback(async () => {
+        if (!authToken || !deviceId) return;
+        setLoading(true);
+        try {
+            const res = await fetch(`${API_BASE_URL}devices/${deviceId}/pins`, {
+                headers: authHeaders(),
+            });
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            setPins(data.map((p: any) => ({
+                id: p.id,
+                label: p.label,
+                code: p.code,
+                strength: p.strength || (p.code?.length >= 6 ? "Strong" : "Moderate"),
+                pinType: p.pinType || "permanent",
+            })));
+        } catch {
+            setPins([]);
+        } finally {
+            setLoading(false);
+        }
+    }, [authToken, deviceId, authHeaders]);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchPins();
+        }, [fetchPins])
+    );
 
     // --- LOGIC FUNCTIONS ---
 
@@ -59,7 +104,6 @@ export default function PinSettings() {
         setIsAuthVisible(true);
     };
 
-    // GUARANTEED FIRE: Added Console Log to verify execution
     const handleGenerateOtp = () => {
         console.log("--> Generate OTP button pressed!");
         const newCode = Math.floor(1000 + Math.random() * 9000).toString();
@@ -81,11 +125,18 @@ export default function PinSettings() {
             Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
             Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
             Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
-            Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true })
+            Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
         ]).start();
     };
 
-    const handleAddPermanentPin = () => {
+    const closeAddModal = () => {
+        setIsAddPinVisible(false);
+        setNewPinLabel("");
+        setNewPinCode("");
+        setErrorMessage("");
+    };
+
+    const handleAddPin = async () => {
         if (newPinLabel.trim() === "") {
             setErrorMessage("Please provide a label.");
             triggerShake();
@@ -97,41 +148,60 @@ export default function PinSettings() {
             triggerShake();
             return;
         }
-
-        const uniqueId = `pin_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-        setPins(currentPins => [...currentPins, { 
-            id: uniqueId, 
-            label: newPinLabel, 
-            code: newPinCode, 
-            strength: newPinCode.length >= 6 ? "Strong" : "Moderate" 
-        }]);
         
-        closeAddModal();
-    };
-
-    const closeAddModal = () => {
-        setIsAddPinVisible(false);
-        setNewPinLabel("");
-        setNewPinCode("");
-        setErrorMessage(""); 
+        setSaving(true);
+        try {
+            const res = await fetch(`${API_BASE_URL}devices/${deviceId}/pins`, {
+                method: "POST",
+                headers: authHeaders(),
+                body: JSON.stringify({ label: newPinLabel, code: newPinCode, pinType: "permanent" }),
+            });
+            if (!res.ok) throw new Error();
+            const newPin = await res.json();
+            setPins((prev) => [...prev, {
+                id: newPin.id,
+                label: newPin.label,
+                code: newPin.code,
+                strength: newPin.strength,
+                pinType: newPin.pinType,
+            }]);
+            closeAddModal();
+        } catch {
+            setErrorMessage("Failed to save PIN. Try again.");
+            triggerShake();
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handleDeletePin = (id: string, label: string) => {
-        Alert.alert("Delete PIN", `Are you sure you want to delete the ${label} code?`, [
+        Alert.alert("Delete PIN", `Delete the "${label}" code?`, [
             { text: "Cancel", style: "cancel" },
-            { 
-                text: "Delete", 
-                style: "destructive", 
-                onPress: () => setPins(currentPins => currentPins.filter(p => p.id !== id)) 
-            }
+            {
+                text: "Delete",
+                style: "destructive",
+                onPress: async () => {
+                    setDeletingId(id);
+                    try {
+                        await fetch(`${API_BASE_URL}devices/${deviceId}/pins/${id}`, {
+                            method: "DELETE",
+                            headers: authHeaders(),
+                        });
+                        setPins((prev) => prev.filter((p) => p.id !== id));
+                    } catch {
+                        Alert.alert("Error", "Failed to delete PIN.");
+                    } finally {
+                        setDeletingId(null);
+                    }
+                },
+            },
         ]);
     };
 
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" />
-            
+
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
                     <MaterialCommunityIcons name="chevron-left" size={28} color="#FAFAFA" />
@@ -140,7 +210,6 @@ export default function PinSettings() {
                 <View style={{ width: 40 }} />
             </View>
 
-            {/* keyboardShouldPersistTaps="handled" prevents ScrollView from swallowing the tap */}
             <ScrollView 
                 contentContainerStyle={styles.scrollContent} 
                 showsVerticalScrollIndicator={false}
@@ -150,7 +219,6 @@ export default function PinSettings() {
                 {/* 1. ONE-TIME PIN SECTION */}
                 <View style={styles.sectionHeaderRow}>
                     <Text style={styles.sectionLabel}>One-Time PINs</Text>
-                    {/* FIXED: Massive hitSlop and explicit bind to ensure taps register */}
                     <TouchableOpacity 
                         style={styles.smallAddBtn} 
                         onPress={handleGenerateOtp} 
@@ -158,7 +226,7 @@ export default function PinSettings() {
                         hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                     >
                         <MaterialCommunityIcons name="plus" size={18} color="#050505" />
-                        <Text style={styles.smallAddBtnText}>Generate</Text>
+                        <Text style={styles.smallAddBtnText}>Add PIN</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -203,7 +271,11 @@ export default function PinSettings() {
                     </TouchableOpacity>
                 </View>
 
-                {pins.length === 0 ? (
+                {loading ? (
+                    <View style={{ paddingVertical: 32, alignItems: "center" }}>
+                        <ActivityIndicator color="#FAFAFA" />
+                    </View>
+                ) : pins.length === 0 ? (
                     <View style={styles.emptyState}>
                         <Text style={styles.emptyStateText}>No permanent codes configured</Text>
                     </View>
@@ -222,13 +294,17 @@ export default function PinSettings() {
                                         {item.strength}
                                     </Text>
                                 </View>
-                                <TouchableOpacity 
-                                    onPress={() => handleDeletePin(item.id, item.label)} 
-                                    style={{ marginLeft: 12, padding: 8 }}
-                                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                >
-                                    <MaterialCommunityIcons name="trash-can-outline" size={22} color="#EF4444" />
-                                </TouchableOpacity>
+                                {deletingId === item.id ? (
+                                    <ActivityIndicator size="small" color="#EF4444" style={{ marginLeft: 12 }} />
+                                ) : (
+                                    <TouchableOpacity
+                                        onPress={() => handleDeletePin(item.id, item.label)}
+                                        style={{ marginLeft: 12, padding: 8 }}
+                                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                    >
+                                        <MaterialCommunityIcons name="trash-can-outline" size={22} color="#EF4444" />
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         </View>
                     ))
@@ -289,7 +365,7 @@ export default function PinSettings() {
                                 <Text style={styles.errorText}>{errorMessage}</Text>
                             </View>
                         )}
-                        
+
                         <TextInput
                             style={[
                                 styles.input, 
@@ -319,8 +395,8 @@ export default function PinSettings() {
                             <TouchableOpacity style={styles.cancelBtn} onPress={closeAddModal}>
                                 <Text style={styles.cancelBtnText}>Cancel</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={styles.confirmBtn} onPress={handleAddPermanentPin}>
-                                <Text style={styles.confirmBtnText}>Save PIN</Text>
+                            <TouchableOpacity style={styles.confirmBtn} onPress={handleAddPin} disabled={saving}>
+                                {saving ? <ActivityIndicator color="#050505" /> : <Text style={styles.confirmBtnText}>Save PIN</Text>}
                             </TouchableOpacity>
                         </View>
                     </Animated.View>
@@ -339,9 +415,8 @@ const styles = StyleSheet.create({
     scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
     
     sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, marginTop: 24, zIndex: 10 },
-    sectionLabel: { color: "#71717A", fontSize: 13, fontWeight: "bold", textTransform: "uppercase" },
+    sectionLabel: { color: "#71717A", fontSize: 13, fontWeight: "bold", textTransform: "uppercase", letterSpacing: 1 },
     
-    // Increased physical padding to ensure it's easily clickable
     smallAddBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FAFAFA', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, gap: 6 },
     smallAddBtnText: { color: '#050505', fontSize: 13, fontWeight: 'bold' },
 
