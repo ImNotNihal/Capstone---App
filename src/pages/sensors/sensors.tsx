@@ -4,9 +4,6 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
 import {
     Animated,
     Dimensions,
@@ -169,116 +166,6 @@ export default function Sensors() {
                         <View>
                             <Text style={styles.configTitle}>PIN Codes</Text>
                             <Text style={styles.configDesc}>Access keys</Text>
-    const [isLocked, setIsLocked] = useState(true);
-    const [motionEnabled, setMotionEnabled] = useState(true);
-    
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => {
-        Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-        }).start();
-    }, []);
-
-    return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" />
-            
-            {/* CLEAN HEADER: Title only */}
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Access Control</Text>
-            </View>
-
-            {/* Ghost area for layout stability */}
-            <View style={styles.ghostContainer} />
-
-            <Animated.ScrollView 
-                style={{ opacity: fadeAnim }}
-                contentContainerStyle={styles.scrollContent}
-                showsVerticalScrollIndicator={false}
-            >
-                {/* PRIMARY STATUS: FRONT DOOR */}
-                <TouchableOpacity 
-                    style={[styles.mainCard, !isLocked && styles.mainCardUnlocked]} 
-                    onPress={() => setIsLocked(!isLocked)}
-                    activeOpacity={0.9}
-                >
-                    <View style={styles.mainCardHeader}>
-                        <View style={[styles.mainIconWrapper, { backgroundColor: isLocked ? "#10B98120" : "#EF444420" }]}>
-                            <MaterialCommunityIcons 
-                                name={isLocked ? "lock" : "lock-open"} 
-                                size={32} 
-                                color={isLocked ? "#10B981" : "#EF4444"} 
-                            />
-                        </View>
-                        <View style={styles.batteryBadge}>
-                            <MaterialCommunityIcons name="battery" size={14} color="#71717A" />
-                            <Text style={styles.batteryText}>92%</Text>
-                        </View>
-                    </View>
-                    <View style={styles.mainCardBody}>
-                        <Text style={styles.mainCardTitle}>Front Door</Text>
-                        <Text style={styles.mainCardStatus}>
-                            Current State: <Text style={{ color: isLocked ? "#10B981" : "#EF4444" }}>{isLocked ? "Locked" : "Unlocked"}</Text>
-                        </Text>
-                    </View>
-                    <View style={styles.mainCardFooter}>
-                        <Text style={styles.tapHint}>Tap to {isLocked ? "Unlock" : "Lock"}</Text>
-                    </View>
-                </TouchableOpacity>
-
-                <Text style={styles.sectionLabel}>Configuration</Text>
-
-                {/* CONFIGURATION GRID */}
-                <View style={styles.grid}>
-                    {/* Motion Detection */}
-                    <TouchableOpacity 
-                        style={styles.configCard}
-                        onPress={() => router.push("/sensors/motion-settings")}
-                        activeOpacity={0.7}
-                    >
-                        <View style={styles.configHeader}>
-                            <MaterialCommunityIcons name="run-fast" size={24} color="#8B5CF6" />
-                            <Switch 
-                                value={motionEnabled} 
-                                onValueChange={(val) => setMotionEnabled(val)}
-                                trackColor={{ false: "#27272A", true: "#8B5CF650" }}
-                                thumbColor={motionEnabled ? "#8B5CF6" : "#71717A"}
-                            />
-                        </View>
-                        <View>
-                            <Text style={styles.configTitle}>Motion</Text>
-                            <Text style={styles.configDesc}>Setup zones</Text>
-                        </View>
-                        <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
-                    </TouchableOpacity>
-
-                    {/* PIN Configuration */}
-                    <TouchableOpacity
-                        style={styles.configCard}
-                        activeOpacity={0.7}
-                        onPress={() => router.push("/sensors/pin-settings")}
-                    >
-                        <MaterialCommunityIcons name="dialpad" size={24} color="#F59E0B" />
-                        <View>
-                            <Text style={styles.configTitle}>PIN Codes</Text>
-                            <Text style={styles.configDesc}>Access keys</Text>
-                        </View>
-                        <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
-                    </TouchableOpacity>
-
-                    {/* Facial Recognition */}
-                    <TouchableOpacity
-                        style={styles.configCard}
-                        activeOpacity={0.7}
-                        onPress={() => router.push("/sensors/facial-settings")}
-                    >
-                        <MaterialCommunityIcons name="face-recognition" size={24} color="#3B82F6" />
-                        <View>
-                            <Text style={styles.configTitle}>Face ID</Text>
-                            <Text style={styles.configDesc}>4 Profiles</Text>
                         </View>
                         <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
                     </TouchableOpacity>
@@ -296,21 +183,6 @@ export default function Sensors() {
                         </View>
                         <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
                     </TouchableOpacity>
-
-                    {/* Fingerprint Configuration */}
-                    <TouchableOpacity
-                        style={styles.configCard}
-                        activeOpacity={0.7}
-                        onPress={() => router.push("/sensors/biometric-settings")}
-                    >
-                        <MaterialCommunityIcons name="fingerprint" size={24} color="#10B981" />
-                        <View>
-                            <Text style={styles.configTitle}>Biometrics</Text>
-                            <Text style={styles.configDesc}>Scanner</Text>
-                        </View>
-                        <MaterialCommunityIcons name="chevron-right" size={18} color="#27272A" style={styles.cardArrow} />
-                    </TouchableOpacity>
-                </View>
 
                     {/* Fingerprint Configuration */}
                     <TouchableOpacity
@@ -363,23 +235,6 @@ const styles = StyleSheet.create({
         marginTop: 32,
         marginBottom: 16,
     },
-        fontSize: 32,
-        fontWeight: "bold",
-    },
-    ghostContainer: {
-        height: 10,
-    },
-    scrollContent: {
-        paddingHorizontal: 20,
-        paddingBottom: 40,
-    },
-    sectionLabel: {
-        color: "#FAFAFA",
-        fontSize: 18,
-        fontWeight: "600",
-        marginTop: 32,
-        marginBottom: 16,
-    },
     mainCard: {
         backgroundColor: "#09090B",
         borderRadius: 28,
@@ -421,27 +276,6 @@ const styles = StyleSheet.create({
     },
     mainCardTitle: {
         color: "#FAFAFA",
-        fontSize: 22,
-        fontWeight: "700",
-    },
-    mainCardStatus: {
-        color: "#71717A",
-        fontSize: 15,
-        marginTop: 4,
-    },
-    mainCardFooter: {
-        marginTop: 24,
-        paddingTop: 16,
-        borderTopWidth: 1,
-        borderTopColor: "#18181B",
-    },
-        fontWeight: "bold",
-    },
-    mainCardBody: {
-        marginTop: 20,
-    },
-    mainCardTitle: {
-        color: "#FAFAFA",
         fontSize: 24,
         fontWeight: "bold",
     },
@@ -467,28 +301,6 @@ const styles = StyleSheet.create({
         flexWrap: "wrap",
         justifyContent: "space-between",
         gap: 12,
-    },
-    configCard: {
-        width: COLUMN_WIDTH,
-        backgroundColor: "#09090B",
-        borderRadius: 24,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: "#18181B",
-        minHeight: 140,
-        justifyContent: "space-between",
-    },
-    configHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-    },
-    configTitle: {
-        color: "#FAFAFA",
-        fontSize: 15,
-        fontWeight: "600",
-        marginTop: 12,
-    },
     },
     configCard: {
         width: COLUMN_WIDTH,

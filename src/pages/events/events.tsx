@@ -13,8 +13,8 @@ import {
     TouchableOpacity,
     View
 } from "react-native";
-import { AppContext } from "../../context/app-context";
 import { API_BASE_URL } from "../../config";
+import { AppContext } from "../../context/app-context";
 import SigninForm from "../settings/signInForm";
 
 type EventCategory = "doorbell" | "access" | "motion";
@@ -31,15 +31,15 @@ type EventItem = {
 };
 
 const EVENT_MAP: Record<string, { category: EventCategory; title: string; icon: string; tint: string }> = {
-    lock:           { category: "access",   title: "Door Locked",         icon: "lock",                  tint: "#10B981" },
-    unlock:         { category: "access",   title: "Door Unlocked",       icon: "lock-open",             tint: "#10B981" },
-    motion:         { category: "motion",   title: "Motion Detected",     icon: "walk",                  tint: "#8B5CF6" },
-    doorbell:       { category: "doorbell", title: "Doorbell Rung",       icon: "bell-ring",             tint: "#F59E0B" },
-    failed_access:  { category: "doorbell", title: "Failed Access",       icon: "shield-alert-outline",  tint: "#EF4444" },
-    face:           { category: "access",   title: "Face Unlock",         icon: "face-recognition",      tint: "#10B981" },
-    fingerprint:    { category: "access",   title: "Fingerprint Unlock",  icon: "fingerprint",           tint: "#10B981" },
-    keypad:         { category: "access",   title: "Keypad Unlock",       icon: "dialpad",               tint: "#F59E0B" },
-    bluetooth:      { category: "access",   title: "Bluetooth Unlock",    icon: "bluetooth",             tint: "#3B82F6" },
+    lock:          { category: "access",   title: "Door Locked",        icon: "lock",                  tint: "#10B981" },
+    unlock:        { category: "access",   title: "Door Unlocked",      icon: "lock-open",             tint: "#10B981" },
+    motion:        { category: "motion",   title: "Motion Detected",    icon: "walk",                  tint: "#8B5CF6" },
+    doorbell:      { category: "doorbell", title: "Doorbell Rung",      icon: "bell-ring",             tint: "#F59E0B" },
+    failed_access: { category: "doorbell", title: "Failed Access",      icon: "shield-alert-outline",  tint: "#EF4444" },
+    face:          { category: "access",   title: "Face Unlock",        icon: "face-recognition",      tint: "#10B981" },
+    fingerprint:   { category: "access",   title: "Fingerprint Unlock", icon: "fingerprint",           tint: "#10B981" },
+    keypad:        { category: "access",   title: "Keypad Unlock",      icon: "dialpad",               tint: "#F59E0B" },
+    bluetooth:     { category: "access",   title: "Bluetooth Unlock",   icon: "bluetooth",             tint: "#3B82F6" },
 };
 
 const DEFAULT_EVENT = { category: "access" as EventCategory, title: "Event", icon: "bell-outline", tint: "#71717A" };
@@ -78,11 +78,11 @@ export default function Events() {
     const [currentMonth,   setCurrentMonth]   = useState(new Date().getMonth());
     const [currentYear,    setCurrentYear]    = useState(new Date().getFullYear());
 
-    const [events,        setEvents]        = useState<EventItem[]>([]);
+    const [events,         setEvents]         = useState<EventItem[]>([]);
     const [loadingEvents, setLoadingEvents] = useState(false);
     const [eventsError,   setEventsError]   = useState<string | null>(null);
 
-    const fadeAnim  = useRef(new Animated.Value(0)).current;
+    const fadeAnim   = useRef(new Animated.Value(0)).current;
     const translateY = useRef(new Animated.Value(20)).current;
 
     useEffect(() => {
@@ -228,7 +228,6 @@ export default function Events() {
             <Animated.ScrollView
                 contentContainerStyle={styles.listContent}
                 style={{ opacity: fadeAnim, transform: [{ translateY }], zIndex: 1 }}
-                style={{ opacity: fadeAnim, transform: [{ translateY }] }}
                 showsVerticalScrollIndicator={false}
             >
                 {loadingEvents && (
@@ -388,16 +387,6 @@ const styles = StyleSheet.create({
         paddingBottom: 16,
         gap: 8,
     },
-    filterContainer: {
-        zIndex: 1,
-        elevation: 1,
-    },
-    filterScroll: {
-        paddingHorizontal: 20,
-        paddingTop: 12,
-        paddingBottom: 16,
-        gap: 8,
-    },
     filterPill: {
         paddingVertical: 8,
         paddingHorizontal: 16,
@@ -546,80 +535,6 @@ const styles = StyleSheet.create({
         borderColor: "#1F2937",
         borderRadius: 24,
         padding: 24,
-    },
-    calendarHeader: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginBottom: 20,
-    },
-    calendarTitle: {
-        color: "#FAFAFA",
-        fontSize: 18,
-        fontWeight: "bold",
-    },
-    calNavBtn: {
-        padding: 4,
-    },
-    calWeekdays: {
-        flexDirection: "row",
-        marginBottom: 12,
-    },
-    calDayWrapper: {
-        width: "14.28%",
-        alignItems: "center",
-        justifyContent: "center",
-    },
-    calWeekdayText: {
-        color: "#71717A",
-        fontSize: 13,
-        fontWeight: "600",
-    },
-    calendarGrid: {
-        flexDirection: "row",
-        flexWrap: "wrap",
-        rowGap: 12,
-    },
-    calDayBox: {
-        width: 38,
-        height: 38,
-        justifyContent: "center",
-        alignItems: "center",
-        borderRadius: 19,
-    },
-    calDayActive: {
-        backgroundColor: "#10B981",
-    },
-    calDayText: {
-        color: "#FAFAFA",
-        fontSize: 15,
-        fontWeight: "500",
-    },
-    calDayTextToday: {
-        color: "#3B82F6",
-        fontWeight: "bold",
-    },
-    calDayTextActive: {
-        color: "#050505",
-        fontWeight: "bold",
-    },
-    calendarClearBtn: {
-        marginTop: 24,
-        alignItems: "center",
-        paddingVertical: 14,
-        backgroundColor: "#1F2937",
-        borderRadius: 12,
-    },
-    calendarClearText: {
-        color: "#FAFAFA",
-        fontSize: 15,
-        fontWeight: "600",
-    },
-    calendarCloseBtn: {
-        marginTop: 12,
-        alignItems: "center",
-        paddingVertical: 14,
-    },
     },
     calendarHeader: {
         flexDirection: "row",

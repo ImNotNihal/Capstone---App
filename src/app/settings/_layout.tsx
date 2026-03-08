@@ -10,26 +10,6 @@ function BackButton() {
     );
 }
 
-export default function SettingsLayout() {
-    return (
-        <Stack
-            screenOptions={{
-                headerShown: true,
-                headerStyle: { backgroundColor: "#fff" },
-                headerShadowVisible: false,
-                headerTitleAlign: "center",
-                title: "",
-                headerLeft: () => <BackButton />,
-            }}
-        >
-            {/* Main settings page — no header (it has its own) */}
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-
-            {/* Sub-pages — show back button header */}
-            <Stack.Screen name="manage-users" />
-            <Stack.Screen name="security-privacy" />
-            <Stack.Screen name="device-config" />
-            <Stack.Screen name="camera-settings" />
 const sharedScreenOptions = {
     headerShown: true,
     headerStyle: { backgroundColor: "#050505" },
@@ -41,7 +21,10 @@ const sharedScreenOptions = {
 export default function SettingsLayout() {
     return (
         <Stack>
+            {/* Main settings page — no header (it has its own) */}
             <Stack.Screen name="index" options={{ headerShown: false }} />
+            
+            {/* Sub-pages — show back button header */}
             <Stack.Screen name="manage-users" options={sharedScreenOptions} />
             <Stack.Screen name="security-privacy" options={sharedScreenOptions} />
             <Stack.Screen name="device-config" options={sharedScreenOptions} />
@@ -57,8 +40,7 @@ const styles = StyleSheet.create({
     },
     backText: {
         fontSize: 16,
-        color: "#2563eb",
-        color: "#FAFAFA",
+        color: "#FAFAFA", // Removed the duplicate blue color
         fontWeight: "600",
     },
 });

@@ -47,17 +47,16 @@ const EVENT_ICONS: Record<string, any> = {
 
 const METHOD_LABELS: Record<string, string> = {
     face: "Facial Recognition",
-    fingerprint: "Fingerprint",
+    fingerprint: "Fingerprint Scanner",
     keypad: "Keypad Entry",
+    bluetooth: "Bluetooth Proximity",
 };
 
 const METHOD_ICONS: Record<string, string> = {
     face: "face-recognition",
     fingerprint: "fingerprint",
     keypad: "dialpad",
-    fingerprint: "Fingerprint Scanner",
-    keypad: "Keypad Entry",
-    bluetooth: "Bluetooth Proximity",
+    bluetooth: "bluetooth",
 };
 
 const ALL_METHODS = ["face", "fingerprint", "keypad"] as const;
@@ -78,12 +77,8 @@ export default function Home() {
 
     // --- Media Controls State ---
     const [isCallActive, setIsCallActive] = useState(false);
-    const [isMuted, setIsMuted] = useState(true);
-    const [hasStream, setHasStream] = useState(false);
-    
-    // --- Media Controls State ---
-    const [isCallActive, setIsCallActive] = useState(false);
     const [isMuted, setIsMuted] = useState(true); // Default feed audio to muted
+    const [hasStream, setHasStream] = useState(false);
 
     // --- Hardware Mock State ---
     const [batteryLevel] = useState(85);
@@ -178,12 +173,16 @@ export default function Home() {
             const data = await res.json();
             const methods = data.authMethods || {};
             const state: Record<string, boolean> = {};
+            const active: string[] = [];
             for (const m of ALL_METHODS) {
                 state[m] = methods[m]?.isActive ?? false;
+                if (state[m]) active.push(m);
             }
             setMethodsState(state);
+            setActiveMethods(active);
         } catch {
             setMethodsState({ face: false, fingerprint: false, keypad: false });
+            setActiveMethods([]);
         } finally {
             setLoadingMethods(false);
         }
@@ -210,10 +209,6 @@ export default function Home() {
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="#050505" />
 
-            {/* COMPACT HEADER */}
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Front Door</Text>
-            
             {/* COMPACT HEADER WITH HARDWARE STATUS */}
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Front Door</Text>
@@ -249,6 +244,7 @@ export default function Home() {
 
                     {/* CAMERA MEDIA CONTROLS */}
                     <View style={styles.cameraControls}>
+                        {/* Speaker Toggle */}
                         <TouchableOpacity
                             style={[styles.overlayButton, !isMuted && styles.overlayButtonActive]}
                             onPress={toggleMute}
@@ -259,6 +255,8 @@ export default function Home() {
                                 color={!isMuted ? "#000" : "#fff"}
                             />
                         </TouchableOpacity>
+                        
+                        {/* Microphone Toggle */}
                         <TouchableOpacity
                             style={[styles.overlayButton, isCallActive && styles.overlayButtonActive]}
                             onPress={toggleCall}
@@ -267,41 +265,6 @@ export default function Home() {
                                 name={isCallActive ? "microphone" : "microphone-off"}
                                 size={22}
                                 color={isCallActive ? "#000" : "#fff"}
-                            />
-                        </TouchableOpacity>
-                
-                {/* HERO CAMERA FEED */}
-                <View style={styles.cameraHero}>
-                    <CameraFeed />
-                    
-                    <View style={styles.liveOverlay}>
-                        <PulseDot />
-                        <Text style={styles.liveText}>LIVE</Text>
-                    </View>
-
-                    {/* CAMERA MEDIA CONTROLS */}
-                    <View style={styles.cameraControls}>
-                        {/* Speaker Toggle */}
-                        <TouchableOpacity 
-                            style={[styles.overlayButton, !isMuted && styles.overlayButtonActive]} 
-                            onPress={toggleMute}
-                        >
-                            <MaterialCommunityIcons 
-                                name={isMuted ? "volume-off" : "volume-high"} 
-                                size={22} 
-                                color={!isMuted ? "#000" : "#fff"} 
-                            />
-                        </TouchableOpacity>
-
-                        {/* Microphone Toggle */}
-                        <TouchableOpacity 
-                            style={[styles.overlayButton, isCallActive && styles.overlayButtonActive]} 
-                            onPress={toggleCall}
-                        >
-                            <MaterialCommunityIcons 
-                                name={isCallActive ? "microphone" : "microphone-off"} 
-                                size={22} 
-                                color={isCallActive ? "#000" : "#fff"} 
                             />
                         </TouchableOpacity>
                         
@@ -315,18 +278,12 @@ export default function Home() {
                 {/* ANIMATED ACTION SECTION */}
                 <Animated.View style={[styles.actionSection, { opacity: fadeAnim, transform: [{ translateY }] }]}>
                     <Animated.View style={{ transform: [{ scale: lockScale }] }}>
-                        <TouchableOpacity
-                            style={[styles.sleekLockPill, isLocked ? styles.pillLocked : styles.pillUnlocked]}
                         <TouchableOpacity 
                             style={[styles.sleekLockPill, isLocked ? styles.pillLocked : styles.pillUnlocked]} 
                             onPress={handleLockToggle}
                             activeOpacity={1}
                         >
                             <View style={[styles.pillIconBg, isLocked ? styles.pillIconBgLocked : styles.pillIconBgUnlocked]}>
-                                <MaterialCommunityIcons
-                                    name={isLocked ? "lock" : "lock-open-variant"}
-                                    size={20}
-                                    color={isLocked ? "#10B981" : "#EF4444"}
                                 <MaterialCommunityIcons 
                                     name={isLocked ? "lock" : "lock-open-variant"} 
                                     size={20} 
@@ -340,17 +297,6 @@ export default function Home() {
                     </Animated.View>
                 </Animated.View>
 
-                {/* ACTIVITY + ACCESS METHODS */}
-                <Animated.View style={[styles.activitySection, { opacity: fadeAnim, transform: [{ translateY }] }]}>
-
-                    {/* Recent Activity */}
-                    <Text style={styles.sectionTitle}>Recent Activity</Text>
-                    <View style={styles.activityCard}>
-                        <View style={styles.activityIconWrapper}>
-                            <MaterialCommunityIcons
-                                name={lastEvent ? (EVENT_ICONS[lastEvent.type] || EVENT_ICONS.DEFAULT) : "clock-outline"}
-                                size={22}
-                                color="#A1A1AA"
                 {/* ANIMATED ACTIVITY LOG */}
                 <Animated.View style={[styles.activitySection, { opacity: fadeAnim, transform: [{ translateY }] }]}>
                     <Text style={styles.sectionTitle}>Recent Activity</Text>
@@ -440,13 +386,7 @@ const PulseDot = () => {
 };
 
 /* --- Camera Feed Sub-Component --- */
-const CameraFeed = ({ onStreamChange }: { onStreamChange: (v: boolean) => void }) => {
-
-    return <Animated.View style={[styles.liveDot, { opacity: opacityAnim }]} />;
-};
-
-/* --- Camera Feed Sub-Component --- */
-const CameraFeed = () => {
+const CameraFeed = ({ onStreamChange }: { onStreamChange?: (v: boolean) => void }) => {
     const { cameraBaseUrl, isWebBrowser, authToken } = useContext(AppContext);
     const [source, setSource] = useState("");
     const [webViewKey, setWebViewKey] = useState(0);
@@ -457,14 +397,14 @@ const CameraFeed = () => {
                 const url = `${cameraBaseUrl}/stream?ts=${Date.now()}`;
                 setSource(url);
                 setWebViewKey((prev) => prev + 1);
-                onStreamChange(true);
+                if (onStreamChange) onStreamChange(true);
             } else {
                 setSource("");
-                onStreamChange(false);
+                if (onStreamChange) onStreamChange(false);
             }
             return () => {
                 setSource("");
-                onStreamChange(false);
+                if (onStreamChange) onStreamChange(false);
             };
         }, [cameraBaseUrl, onStreamChange])
     );
@@ -487,14 +427,12 @@ const CameraFeed = () => {
                         }}
                         style={{ flex: 1, backgroundColor: '#050505' }}
                         scrollEnabled={false}
-                        onError={() => onStreamChange(false)}
+                        onError={() => { if(onStreamChange) onStreamChange(false); }}
                     />
                 )
             ) : (
                 <View style={styles.videoPlaceholder}>
                     <MaterialCommunityIcons name="video-off-outline" size={36} color="#3F3F46" />
-                    <Text style={styles.videoText}>Camera offline</Text>
-                    <Text style={styles.videoSubText}>No stream available</Text>
                     <Text style={styles.videoText}>Camera sleeping</Text>
                     <Text style={styles.videoSubText}>Waiting for motion</Text>
                 </View>
@@ -562,59 +500,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    },
-    batteryContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    batteryText: {
-        color: '#71717A',
-        fontSize: 11,
-        fontWeight: '600',
-        marginRight: 2,
-    },
-    cameraHero: {
-        width: '100%',
-        aspectRatio: 16 / 9, 
-        backgroundColor: '#09090B',
-        position: 'relative',
-        borderBottomWidth: 1,
-        borderColor: '#18181B',
-    },
-    videoPlaceholder: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
     videoText: {
         color: '#A1A1AA',
         marginTop: 8,
         fontSize: 14,
         fontWeight: '500',
-    },
-    videoSubText: {
-        color: '#52525B',
-        fontSize: 12,
-        marginTop: 2,
-    },
-    liveOverlay: {
-        position: 'absolute',
-        top: 16,
-        left: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 8,
-    },
-    liveDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#EF4444',
-        marginRight: 6,
-    },
     },
     videoSubText: {
         color: '#52525B',
@@ -709,7 +599,6 @@ const styles = StyleSheet.create({
     },
     sectionTitle: {
         color: '#71717A',
-        fontSize: 12,
         fontSize: 13,
         fontWeight: '600',
         textTransform: 'uppercase',
@@ -741,7 +630,6 @@ const styles = StyleSheet.create({
     },
     activityTitle: {
         color: '#E4E4E7',
-        fontSize: 14,
         fontSize: 15,
         fontWeight: '500',
     },
@@ -750,7 +638,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         marginTop: 4,
     },
-    // Access Methods Grid
     methodsGrid: {
         flexDirection: 'row',
         gap: 10,
@@ -789,7 +676,6 @@ const styles = StyleSheet.create({
         borderRadius: 3,
     },
     methodStatus: {
-        fontSize: 11,
         fontWeight: '500',
         fontSize: 13,
         marginTop: 4,
