@@ -1,11 +1,11 @@
-import React, { ReactNode, useState, useContext } from "react";
-import { ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
-import styles from "./styles";
 import { AppContext } from "@/src/context/app-context";
+import { useSettings } from "@/src/hooks/useSettings";
+import SigninForm from "@/src/pages/settings/signInForm";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import SigninForm from "@/src/pages/settings/signInForm";
-import { useSettings } from "@/src/hooks/useSettings";
+import React, { ReactNode, useContext, useState } from "react";
+import { ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
+import styles from "./styles";
 
 export default function Settings() {
     const { user, deviceId, signout, isDeviceConnected } = useContext(AppContext);
@@ -49,7 +49,9 @@ export default function Settings() {
                     <View style={styles.card}>
                         <View style={styles.profileRow}>
                             <View style={styles.avatar}>
-                                <Text style={styles.avatarText}>{`${user?.firstName[0]}${user?.lastName[0]}`}</Text>
+                                <Text style={styles.avatarText}>
+                                    {`${user?.firstName?.[0] || ""}${user?.lastName?.[0] || ""}`.toUpperCase()}
+                                </Text>
                             </View>
                             <View style={{ flex: 1 }}>
                                 <Text style={styles.profileName}>{`${user?.firstName} ${user?.lastName}`}</Text>
