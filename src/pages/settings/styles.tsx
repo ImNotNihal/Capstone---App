@@ -231,6 +231,52 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: "700",
     },
+
+    /* --- ADDED WIZARD STYLES FOR ADD-DEVICE --- */
+    flex1: {
+        flex: 1,
+    },
+    stepContainer: {
+        flex: 1,
+        justifyContent: "center",
+        paddingVertical: 40,
+        gap: 20,
+    },
+    stepTitle: {
+        fontSize: 24,
+        fontWeight: "700",
+        color: "#FAFAFA",
+        textAlign: "center",
+    },
+    stepDescription: {
+        fontSize: 15,
+        color: "#A1A1AA",
+        textAlign: "center",
+        lineHeight: 22,
+    },
+    successContainer: {
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+        gap: 16,
+    },
+    successIcon: {
+        fontSize: 64,
+    },
+    successTitle: {
+        fontSize: 28,
+        fontWeight: "700",
+        color: "#10B981",
+    },
+    footer: {
+        flexDirection: "row",
+        gap: 12,
+        paddingTop: 16,
+        marginTop: "auto",
+    },
+    buttonSuccess: {
+        backgroundColor: "#10B981",
+    },
 });
 
 export default styles;
