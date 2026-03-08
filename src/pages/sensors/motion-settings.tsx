@@ -1,9 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import Slider from "@react-native-community/slider"; // Note: Ensure this is installed or use a standard View-based slider
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
-    Dimensions,
     ImageBackground,
     SafeAreaView,
     ScrollView,
@@ -15,12 +13,10 @@ import {
     View
 } from "react-native";
 
-const { width } = Dimensions.get("window");
-
 export default function MotionSettings() {
     const router = useRouter();
     const [isEnabled, setIsEnabled] = useState(true);
-    const [sensitivity, setSensitivity] = useState(65);
+    const [sensitivity, setSensitivity] = useState<"low" | "medium" | "high">("medium");
     const [activeZones, setActiveZones] = useState([true, true, false, true]);
 
     const toggleZone = (index: number) => {
@@ -93,30 +89,22 @@ export default function MotionSettings() {
 
                     <View style={styles.divider} />
 
-                    {/* SENSITIVITY SLIDER */}
+                    {/* SENSITIVITY SELECTOR */}
                     <View style={styles.sliderSection}>
-                        <View style={styles.sliderHeader}>
-                            <Text style={styles.settingTitle}>Sensitivity</Text>
-                            <Text style={styles.sliderValue}>{sensitivity}%</Text>
-                        </View>
-                        <View style={styles.sliderWrapper}>
-                             {/* If you don't have @react-native-community/slider installed, 
-                                 replace this with a standard View-based bar for now */}
-                            <Slider
-                                style={{ width: '100%', height: 40 }}
-                                minimumValue={0}
-                                maximumValue={100}
-                                step={1}
-                                value={sensitivity}
-                                onValueChange={setSensitivity}
-                                minimumTrackTintColor="#8B5CF6"
-                                maximumTrackTintColor="#18181B"
-                                thumbTintColor="#8B5CF6"
-                            />
-                        </View>
-                        <View style={styles.sliderLabels}>
-                            <Text style={styles.sliderLabelText}>Low</Text>
-                            <Text style={styles.sliderLabelText}>High</Text>
+                        <Text style={styles.settingTitle}>Sensitivity</Text>
+                        <View style={styles.segmentRow}>
+                            {(["low", "medium", "high"] as const).map((level) => (
+                                <TouchableOpacity
+                                    key={level}
+                                    style={[styles.segment, sensitivity === level && styles.segmentActive]}
+                                    onPress={() => setSensitivity(level)}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={[styles.segmentText, sensitivity === level && styles.segmentTextActive]}>
+                                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
                         </View>
                     </View>
                 </View>
@@ -259,28 +247,30 @@ const styles = StyleSheet.create({
     sliderSection: {
         width: '100%',
     },
-    sliderHeader: {
+    segmentRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        marginTop: 12,
+        borderRadius: 12,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#27272A',
+    },
+    segment: {
+        flex: 1,
+        paddingVertical: 10,
         alignItems: 'center',
-        marginBottom: 10,
+        backgroundColor: '#0A0A0A',
     },
-    sliderValue: {
-        color: "#8B5CF6",
-        fontSize: 16,
-        fontWeight: "bold",
+    segmentActive: {
+        backgroundColor: '#8B5CF6',
     },
-    sliderWrapper: {
-        marginVertical: 10,
+    segmentText: {
+        color: '#71717A',
+        fontSize: 13,
+        fontWeight: '600',
     },
-    sliderLabels: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-    },
-    sliderLabelText: {
-        color: "#3F3F46",
-        fontSize: 12,
-        fontWeight: "600",
+    segmentTextActive: {
+        color: '#FAFAFA',
     },
     infoBox: {
         flexDirection: 'row',
