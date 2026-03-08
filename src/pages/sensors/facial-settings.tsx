@@ -214,7 +214,7 @@ export default function FacialSettings() {
                     <View style={styles.emptyState}>
                         <MaterialCommunityIcons name="face-recognition" size={40} color="#27272A" />
                         <Text style={styles.emptyTitle}>No face profiles enrolled</Text>
-                        <Text style={styles.emptySubtitle}>Tap "Enroll New Face" to add one.</Text>
+                        <Text style={styles.emptySubtitle}>Tap &quot;Enroll New Face&quot; to add one.</Text>
                     </View>
                 ) : (
                     profiles.map((profile) => (
@@ -272,7 +272,7 @@ export default function FacialSettings() {
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <Text style={styles.modalTitle}>Enroll New Face</Text>
-                        <Text style={styles.modalSubtitle}>Enter the person's name and access level.</Text>
+                        <Text style={styles.modalSubtitle}>Enter the person&apos;s name and access level.</Text>
 
                         {enrollError !== "" && (
                             <View style={styles.errorBox}>

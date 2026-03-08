@@ -92,7 +92,7 @@ export default function Events() {
                 Animated.timing(translateY, { toValue: 0, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
             ]).start();
         }
-    }, [user]);
+    }, [user, fadeAnim, translateY]);
 
     const fetchEvents = useCallback(async () => {
         if (!authToken || !deviceId) return;

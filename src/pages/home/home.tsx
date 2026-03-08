@@ -73,7 +73,7 @@ function timeAgo(iso: string): string {
 }
 
 export default function Home() {
-    const { user, deviceId, httpLock, httpUnlock, isLocked, authToken, cameraBaseUrl } = useContext(AppContext);
+    const { user, deviceId, httpLock, httpUnlock, isLocked, authToken } = useContext(AppContext);
     const router = useRouter();
 
     // --- Media Controls State ---
@@ -125,19 +125,7 @@ export default function Home() {
             Animated.timing(lockScale, { toValue: 0.92, duration: 100, useNativeDriver: true }),
             Animated.timing(lockScale, { toValue: 1, duration: 150, useNativeDriver: true })
         ]).start();
-            Animated.timing(lockScale, {
-                toValue: 0.92,
-                duration: 100,
-                useNativeDriver: true,
-            }),
-            Animated.timing(lockScale, {
-                toValue: 1,
-                duration: 150,
-                useNativeDriver: true,
-            })
-        ]).start();
-
-        isLocked ? httpUnlock() : httpLock();
+        if (isLocked) { httpUnlock(); } else { httpLock(); }
     };
 
     const toggleCall = () => setIsCallActive((prev) => !prev);
@@ -478,8 +466,7 @@ const CameraFeed = () => {
                 setSource("");
                 onStreamChange(false);
             };
-            return () => setSource("");
-        }, [cameraBaseUrl])
+        }, [cameraBaseUrl, onStreamChange])
     );
 
     return (

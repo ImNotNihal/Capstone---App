@@ -78,7 +78,7 @@ export default function BiometricSettings() {
             }, 3000);
             return () => clearTimeout(timer);
         }
-    }, [enrollStep]);
+    }, [enrollStep, pulseAnim, pulseOpacity]);
 
     const authHeaders = useCallback(() => {
         const h: Record<string, string> = { "Content-Type": "application/json" };
@@ -415,7 +415,7 @@ export default function BiometricSettings() {
                         {enrollStep === "done" && (
                             <>
                                 <Text style={styles.modalTitle}>Scan Complete!</Text>
-                                <Text style={styles.modalSubtitle}>"{enrollLabel}" is ready to save.</Text>
+                                <Text style={styles.modalSubtitle}>&quot;{enrollLabel}&quot; is ready to save.</Text>
                                 <View style={styles.successIcon}>
                                     <MaterialCommunityIcons name="check-circle" size={64} color="#10B981" />
                                 </View>
