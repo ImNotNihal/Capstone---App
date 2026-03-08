@@ -121,14 +121,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     const httpLock = () => {
         if (!deviceId) return;
+        setIsLocked(true); // optimistic update
         return fetchWithTimeout(`${base_url}send-command/${deviceId}/LOCK`, { method: "POST", headers: authHeaders() })
-            .catch(e => console.warn("Lock command failed:", e));
+            .catch(e => {
+                setIsLocked(false); // revert on failure
+                console.warn("Lock command failed:", e);
+            });
     };
 
     const httpUnlock = () => {
         if (!deviceId) return;
+        setIsLocked(false); // optimistic update
         return fetchWithTimeout(`${base_url}send-command/${deviceId}/UNLOCK`, { method: "POST", headers: authHeaders() })
-            .catch(e => console.warn("Unlock command failed:", e));
+            .catch(e => {
+                setIsLocked(true); // revert on failure
+                console.warn("Unlock command failed:", e);
+            });
     };
 
     const httpGetLockStatus = () => {
