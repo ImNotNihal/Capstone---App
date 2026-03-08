@@ -18,7 +18,6 @@ load_dotenv()
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from routers import auth, credentials, devices, events, media, sensors, settings, profiles, pins
 from pathlib import Path
 
 # Routers
@@ -81,7 +80,6 @@ app.include_router(credentials.router)
 app.include_router(sensors.router)
 app.include_router(media.router)
 app.include_router(profiles.router)
-app.include_router(pins.router)
 
 # ─── WebSocket endpoints ─────────────────────────────────────────────────────
 
