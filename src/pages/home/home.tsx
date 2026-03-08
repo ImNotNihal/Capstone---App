@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { AppContext } from "../../context/app-context";
+import { useTheme } from "../../context/theme-context";
 import SigninForm from "../settings/signInForm";
 
 // --- Constants & Helpers ---
@@ -73,6 +74,7 @@ function timeAgo(iso: string): string {
 
 export default function Home() {
     const { user, deviceId, httpLock, httpUnlock, isLocked, authToken } = useContext(AppContext);
+    const { colors, isDark } = useTheme();
     const router = useRouter();
 
     // --- Media Controls State ---
@@ -197,7 +199,7 @@ export default function Home() {
 
     if (!user) {
         return (
-            <SafeAreaView style={{ flex: 1, backgroundColor: "#050505" }}>
+            <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
                 <View style={styles.authContainer}>
                     <SigninForm />
                 </View>
@@ -206,24 +208,24 @@ export default function Home() {
     }
 
     return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" backgroundColor="#050505" />
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={colors.bg} />
 
             {/* COMPACT HEADER WITH HARDWARE STATUS */}
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Front Door</Text>
-                
+            <View style={[styles.header, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>Front Door</Text>
+
                 <View style={styles.headerRight}>
                     <View style={styles.statusIcons}>
-                        <MaterialCommunityIcons name="wifi" size={15} color="#71717A" style={styles.wifiIcon} />
+                        <MaterialCommunityIcons name="wifi" size={15} color={colors.textTertiary} style={styles.wifiIcon} />
                         <View style={styles.batteryContainer}>
-                            <Text style={styles.batteryText}>{batteryLevel}%</Text>
-                            <MaterialCommunityIcons name="battery-80" size={16} color="#71717A" />
+                            <Text style={[styles.batteryText, { color: colors.textTertiary }]}>{batteryLevel}%</Text>
+                            <MaterialCommunityIcons name="battery-80" size={16} color={colors.textTertiary} />
                         </View>
                     </View>
 
                     <TouchableOpacity onPress={() => router.push("/settings")}>
-                        <MaterialCommunityIcons name="cog-outline" size={24} color="#A1A1AA" />
+                        <MaterialCommunityIcons name="cog-outline" size={24} color={colors.textSecond} />
                     </TouchableOpacity>
                 </View>
             </View>
@@ -278,19 +280,19 @@ export default function Home() {
                 {/* ANIMATED ACTION SECTION */}
                 <Animated.View style={[styles.actionSection, { opacity: fadeAnim, transform: [{ translateY }] }]}>
                     <Animated.View style={{ transform: [{ scale: lockScale }] }}>
-                        <TouchableOpacity 
-                            style={[styles.sleekLockPill, isLocked ? styles.pillLocked : styles.pillUnlocked]} 
+                        <TouchableOpacity
+                            style={[styles.sleekLockPill, isLocked ? styles.pillLocked : styles.pillUnlocked]}
                             onPress={handleLockToggle}
                             activeOpacity={1}
                         >
                             <View style={[styles.pillIconBg, isLocked ? styles.pillIconBgLocked : styles.pillIconBgUnlocked]}>
-                                <MaterialCommunityIcons 
-                                    name={isLocked ? "lock" : "lock-open-variant"} 
-                                    size={20} 
-                                    color={isLocked ? "#10B981" : "#EF4444"} 
+                                <MaterialCommunityIcons
+                                    name={isLocked ? "lock" : "lock-open-variant"}
+                                    size={20}
+                                    color={isLocked ? "#10B981" : "#EF4444"}
                                 />
                             </View>
-                            <Text style={styles.sleekLockText}>
+                            <Text style={[styles.sleekLockText, { color: colors.text }]}>
                                 {isLocked ? "Tap to Unlock" : "Tap to Lock"}
                             </Text>
                         </TouchableOpacity>
@@ -299,31 +301,31 @@ export default function Home() {
 
                 {/* ANIMATED ACTIVITY LOG */}
                 <Animated.View style={[styles.activitySection, { opacity: fadeAnim, transform: [{ translateY }] }]}>
-                    <Text style={styles.sectionTitle}>Recent Activity</Text>
-                    
-                    <View style={styles.activityCard}>
-                        <View style={styles.activityIconWrapper}>
-                            <MaterialCommunityIcons 
-                                name={lastEvent ? (EVENT_ICONS[lastEvent.type] || EVENT_ICONS.DEFAULT) : "clock-outline"} 
-                                size={22} 
-                                color="#A1A1AA" 
+                    <Text style={[styles.sectionTitle, { color: colors.textTertiary }]}>Recent Activity</Text>
+
+                    <View style={[styles.activityCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+                        <View style={[styles.activityIconWrapper, { backgroundColor: colors.bgSubtle }]}>
+                            <MaterialCommunityIcons
+                                name={lastEvent ? (EVENT_ICONS[lastEvent.type] || EVENT_ICONS.DEFAULT) : "clock-outline"}
+                                size={22}
+                                color={colors.textSecond}
                             />
                         </View>
                         <View style={styles.activityTextWrapper}>
-                            <Text style={styles.activityTitle}>
+                            <Text style={[styles.activityTitle, { color: colors.text }]}>
                                 {loadingEvent ? "Checking logs..." : lastEvent ? (EVENT_LABELS[lastEvent.type] ?? lastEvent.type) : "No recent activity"}
                             </Text>
-                            {lastEvent && <Text style={styles.activityTime}>{timeAgo(lastEvent.timestamp)}</Text>}
+                            {lastEvent && <Text style={[styles.activityTime, { color: colors.textSecond }]}>{timeAgo(lastEvent.timestamp)}</Text>}
                         </View>
                     </View>
 
                     {/* Access Methods — individual cards */}
-                    <Text style={styles.sectionTitle}>Access Methods</Text>
+                    <Text style={[styles.sectionTitle, { color: colors.textTertiary }]}>Access Methods</Text>
                     <View style={styles.methodsGrid}>
                         {ALL_METHODS.map((method) => {
                             const enabled = methodsState[method] ?? false;
                             return (
-                                <View key={method} style={styles.methodCard}>
+                                <View key={method} style={[styles.methodCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
                                     <View style={[styles.methodIconWrapper, { backgroundColor: enabled ? "#10B98115" : "#EF444415" }]}>
                                         <MaterialCommunityIcons
                                             name={METHOD_ICONS[method] as any}
@@ -331,7 +333,7 @@ export default function Home() {
                                             color={enabled ? "#10B981" : "#EF4444"}
                                         />
                                     </View>
-                                    <Text style={styles.methodLabel} numberOfLines={1}>
+                                    <Text style={[styles.methodLabel, { color: colors.text }]} numberOfLines={1}>
                                         {METHOD_LABELS[method]}
                                     </Text>
                                     <View style={styles.methodStatusRow}>
@@ -345,21 +347,21 @@ export default function Home() {
                         })}
                     </View>
 
-                    <Text style={styles.sectionTitle}>Active Access Methods</Text>
-                    
-                    <View style={styles.activityCard}>
-                        <View style={styles.activityIconWrapper}>
-                            <MaterialCommunityIcons name="shield-check-outline" size={22} color="#A1A1AA" />
+                    <Text style={[styles.sectionTitle, { color: colors.textTertiary }]}>Active Access Methods</Text>
+
+                    <View style={[styles.activityCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+                        <View style={[styles.activityIconWrapper, { backgroundColor: colors.bgSubtle }]}>
+                            <MaterialCommunityIcons name="shield-check-outline" size={22} color={colors.textSecond} />
                         </View>
                         <View style={styles.activityTextWrapper}>
-                            <Text style={styles.activityTitle}>
-                                {loadingMethods 
-                                    ? "Loading..." 
-                                    : activeMethods.length > 0 
-                                        ? activeMethods.map(m => METHOD_LABELS[m] || m).join(", ") 
+                            <Text style={[styles.activityTitle, { color: colors.text }]}>
+                                {loadingMethods
+                                    ? "Loading..."
+                                    : activeMethods.length > 0
+                                        ? activeMethods.map(m => METHOD_LABELS[m] || m).join(", ")
                                         : "None configured"}
                             </Text>
-                            <Text style={styles.activityTime}>Manage in Settings</Text>
+                            <Text style={[styles.activityTime, { color: colors.textSecond }]}>Manage in Settings</Text>
                         </View>
                     </View>
                 </Animated.View>
@@ -388,6 +390,7 @@ const PulseDot = () => {
 /* --- Camera Feed Sub-Component --- */
 const CameraFeed = ({ onStreamChange }: { onStreamChange?: (v: boolean) => void }) => {
     const { cameraBaseUrl, isWebBrowser, authToken } = useContext(AppContext);
+    const { colors } = useTheme();
     const [source, setSource] = useState("");
     const [webViewKey, setWebViewKey] = useState(0);
 
@@ -425,16 +428,16 @@ const CameraFeed = ({ onStreamChange }: { onStreamChange?: (v: boolean) => void 
                             uri: source,
                             headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
                         }}
-                        style={{ flex: 1, backgroundColor: '#050505' }}
+                        style={{ flex: 1, backgroundColor: colors.bgCard }}
                         scrollEnabled={false}
                         onError={() => { if(onStreamChange) onStreamChange(false); }}
                     />
                 )
             ) : (
-                <View style={styles.videoPlaceholder}>
-                    <MaterialCommunityIcons name="video-off-outline" size={36} color="#3F3F46" />
-                    <Text style={styles.videoText}>Camera sleeping</Text>
-                    <Text style={styles.videoSubText}>Waiting for motion</Text>
+                <View style={[styles.videoPlaceholder, { backgroundColor: colors.bgCard }]}>
+                    <MaterialCommunityIcons name="video-off-outline" size={36} color={colors.navIcon} />
+                    <Text style={[styles.videoText, { color: colors.textSecond }]}>Camera sleeping</Text>
+                    <Text style={[styles.videoSubText, { color: colors.textTertiary }]}>Waiting for motion</Text>
                 </View>
             )}
         </View>
@@ -445,7 +448,6 @@ const CameraFeed = ({ onStreamChange }: { onStreamChange?: (v: boolean) => void 
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#050505',
     },
     authContainer: {
         flex: 1,
@@ -458,9 +460,9 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 20,
         paddingVertical: 16,
+        borderBottomWidth: StyleSheet.hairlineWidth,
     },
     headerTitle: {
-        color: '#FAFAFA',
         fontSize: 20,
         fontWeight: '600',
         letterSpacing: 0.5,
@@ -482,7 +484,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     batteryText: {
-        color: '#71717A',
         fontSize: 11,
         fontWeight: '600',
         marginRight: 2,
@@ -490,10 +491,8 @@ const styles = StyleSheet.create({
     cameraHero: {
         width: '100%',
         aspectRatio: 16 / 9,
-        backgroundColor: '#09090B',
         position: 'relative',
-        borderBottomWidth: 1,
-        borderColor: '#18181B',
+        borderBottomWidth: StyleSheet.hairlineWidth,
     },
     videoPlaceholder: {
         flex: 1,
@@ -501,13 +500,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     videoText: {
-        color: '#A1A1AA',
         marginTop: 8,
         fontSize: 14,
         fontWeight: '500',
     },
     videoSubText: {
-        color: '#52525B',
         fontSize: 12,
         marginTop: 2,
     },
@@ -589,7 +586,6 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(239, 68, 68, 0.15)',
     },
     sleekLockText: {
-        color: '#FAFAFA',
         fontSize: 16,
         fontWeight: '600',
     },
@@ -598,7 +594,6 @@ const styles = StyleSheet.create({
         paddingBottom: 40,
     },
     sectionTitle: {
-        color: '#71717A',
         fontSize: 13,
         fontWeight: '600',
         textTransform: 'uppercase',
@@ -609,18 +604,15 @@ const styles = StyleSheet.create({
     activityCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#09090B',
         padding: 16,
         borderRadius: 16,
         marginBottom: 20,
         borderWidth: 1,
-        borderColor: '#18181B',
     },
     activityIconWrapper: {
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: '#18181B',
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 16,
@@ -629,12 +621,10 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     activityTitle: {
-        color: '#E4E4E7',
         fontSize: 15,
         fontWeight: '500',
     },
     activityTime: {
-        color: '#A1A1AA',
         fontSize: 12,
         marginTop: 4,
     },
@@ -645,11 +635,9 @@ const styles = StyleSheet.create({
     },
     methodCard: {
         flex: 1,
-        backgroundColor: '#09090B',
         borderRadius: 16,
         padding: 14,
         borderWidth: 1,
-        borderColor: '#18181B',
         alignItems: 'flex-start',
         gap: 8,
     },
@@ -661,7 +649,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     methodLabel: {
-        color: '#FAFAFA',
         fontSize: 12,
         fontWeight: '600',
     },

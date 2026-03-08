@@ -1,11 +1,13 @@
 import { API_BASE_URL } from "@/src/config";
 import { AppContext } from "@/src/context/app-context";
+import { useTheme } from "@/src/context/theme-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import React, { useCallback, useContext, useState } from "react";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
     ActivityIndicator,
+    Animated,
     ImageBackground,
     SafeAreaView,
     ScrollView,
@@ -20,6 +22,7 @@ import {
 export default function MotionSettings() {
     const router = useRouter();
     const { authToken, deviceId } = useContext(AppContext);
+    const { colors, isDark } = useTheme();
     
     const [isEnabled, setIsEnabled] = useState(true);
     const [sensitivity, setSensitivity] = useState<"low" | "medium" | "high">("medium");
@@ -69,35 +72,41 @@ export default function MotionSettings() {
                 method: "PUT",
                 headers: authHeaders(),
                 body: JSON.stringify({
+                    motionEnabled: isEnabled,
                     motionSensitivity: sensitivity,
-                    cameraEnabled: isEnabled,
+                    activeZones: activeZones,
                 }),
             });
-        } catch {} finally {
+            router.back();
+        } catch {
+            // stay on page if save fails
+        } finally {
             setSaving(false);
         }
-        router.back();
     };
 
     return (
-        <SafeAreaView style={styles.container}>
-            <StatusBar barStyle="light-content" />
-            
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.bg }]}>
+            <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
+
             {/* HEADER */}
-            <View style={styles.header}>
+            <View style={[styles.header, { borderBottomColor: colors.border }]}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <MaterialCommunityIcons name="chevron-left" size={28} color="#FAFAFA" />
+                    <MaterialCommunityIcons name="chevron-left" size={28} color={colors.text} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Motion Setup</Text>
+                <Text style={[styles.headerTitle, { color: colors.text }]}>Motion Setup</Text>
                 <View style={{ width: 40 }} />
             </View>
 
             {loading ? (
                 <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-                    <ActivityIndicator color="#FAFAFA" />
+                    <ActivityIndicator color={colors.text} />
                 </View>
             ) : (
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+
+                    {/* SENSITIVITY DEMO VISUALIZER */}
+                    <SensitivityVisualizer sensitivity={sensitivity} isEnabled={isEnabled} colors={colors} />
 
                     {/* CAMERA FEED & ZONE SELECTOR */}
                     <View style={styles.feedWrapper}>
@@ -127,11 +136,11 @@ export default function MotionSettings() {
                     </View>
 
                     {/* MAIN CONTROLS */}
-                    <View style={styles.controlsCard}>
+                    <View style={[styles.controlsCard, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
                         <View style={styles.settingRow}>
                             <View>
-                                <Text style={styles.settingTitle}>Enable Detection</Text>
-                                <Text style={styles.settingDesc}>Monitor movement in active zones</Text>
+                                <Text style={[styles.settingTitle, { color: colors.text }]}>Enable Detection</Text>
+                                <Text style={[styles.settingDesc, { color: colors.textTertiary }]}>Monitor movement in active zones</Text>
                             </View>
                             <Switch
                                 value={isEnabled}
@@ -141,20 +150,20 @@ export default function MotionSettings() {
                             />
                         </View>
 
-                        <View style={styles.divider} />
+                        <View style={[styles.divider, { backgroundColor: colors.border }]} />
 
                         {/* SENSITIVITY SELECTOR */}
                         <View style={styles.sliderSection}>
-                            <Text style={styles.settingTitle}>Sensitivity</Text>
-                            <View style={styles.segmentRow}>
+                            <Text style={[styles.settingTitle, { color: colors.text }]}>Sensitivity</Text>
+                            <View style={[styles.segmentRow, { borderColor: colors.borderLight }]}>
                                 {(["low", "medium", "high"] as const).map((level) => (
                                     <TouchableOpacity
                                         key={level}
-                                        style={[styles.segment, sensitivity === level && styles.segmentActive]}
+                                        style={[styles.segment, { backgroundColor: colors.bgSubtle }, sensitivity === level && styles.segmentActive]}
                                         onPress={() => setSensitivity(level)}
                                         activeOpacity={0.7}
                                     >
-                                        <Text style={[styles.segmentText, sensitivity === level && styles.segmentTextActive]}>
+                                        <Text style={[styles.segmentText, { color: colors.textTertiary }, sensitivity === level && styles.segmentTextActive]}>
                                             {level.charAt(0).toUpperCase() + level.slice(1)}
                                         </Text>
                                     </TouchableOpacity>
@@ -166,13 +175,21 @@ export default function MotionSettings() {
                     <View style={styles.infoBox}>
                         <MaterialCommunityIcons name="information-outline" size={20} color="#8B5CF6" />
                         <Text style={styles.infoText}>
-                            Tap boxes on the camera feed above to toggle motion detection zones.
+                            Tap boxes on the camera feed above to toggle motion detection zones. Changes are saved when you apply the configuration.
                         </Text>
                     </View>
 
-                    <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={saving}>
+                    <TouchableOpacity
+                        style={[styles.saveButton, saving && { opacity: 0.7 }]}
+                        onPress={handleSave}
+                        disabled={saving}
+                        activeOpacity={0.8}
+                    >
                         {saving ? (
-                            <ActivityIndicator color="#050505" />
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                                <ActivityIndicator color="#050505" />
+                                <Text style={styles.saveButtonText}>Saving…</Text>
+                            </View>
                         ) : (
                             <Text style={styles.saveButtonText}>Apply Configuration</Text>
                         )}
@@ -183,6 +200,129 @@ export default function MotionSettings() {
         </SafeAreaView>
     );
 }
+
+/* Animated sensitivity visualizer */
+const SENSITIVITY_BARS = { low: 3, medium: 6, high: 10 };
+const SENSITIVITY_COLOR = { low: "#10B981", medium: "#F59E0B", high: "#EF4444" };
+
+function SensitivityVisualizer({
+    sensitivity,
+    isEnabled,
+    colors,
+}: {
+    sensitivity: "low" | "medium" | "high";
+    isEnabled: boolean;
+    colors: any;
+}) {
+    const barCount = SENSITIVITY_BARS[sensitivity];
+    const barColor = isEnabled ? SENSITIVITY_COLOR[sensitivity] : "#27272A";
+    const pulseAnim = useRef(new Animated.Value(0.4)).current;
+
+    useEffect(() => {
+        if (!isEnabled) {
+            pulseAnim.setValue(0.4);
+            return;
+        }
+        const speed = sensitivity === "high" ? 400 : sensitivity === "medium" ? 700 : 1100;
+        const anim = Animated.loop(
+            Animated.sequence([
+                Animated.timing(pulseAnim, { toValue: 1, duration: speed, useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 0.4, duration: speed, useNativeDriver: true }),
+            ])
+        );
+        anim.start();
+        return () => anim.stop();
+    }, [sensitivity, isEnabled, pulseAnim]);
+
+    return (
+        <View style={[vizStyles.container, { backgroundColor: colors.bgCard, borderColor: colors.border }]}>
+            <View style={vizStyles.labelRow}>
+                <MaterialCommunityIcons name="motion-sensor" size={18} color={barColor} />
+                <Text style={[vizStyles.label, { color: colors.text }]}>Motion Sensitivity Preview</Text>
+                <View style={[vizStyles.badge, { backgroundColor: `${barColor}20` }]}>
+                    <Text style={[vizStyles.badgeText, { color: barColor }]}>
+                        {isEnabled ? sensitivity.toUpperCase() : "OFF"}
+                    </Text>
+                </View>
+            </View>
+
+            {/* Animated radar-style bars */}
+            <View style={vizStyles.barsRow}>
+                {Array.from({ length: 10 }).map((_, i) => {
+                    const isActive = i < barCount && isEnabled;
+                    const height = 8 + i * 3;
+                    return (
+                        <Animated.View
+                            key={i}
+                            style={[
+                                vizStyles.bar,
+                                {
+                                    height,
+                                    backgroundColor: isActive ? barColor : colors.bgSubtle,
+                                    opacity: isActive ? pulseAnim : 1,
+                                },
+                            ]}
+                        />
+                    );
+                })}
+            </View>
+
+            <Text style={[vizStyles.hint, { color: colors.textTertiary }]}>
+                {isEnabled
+                    ? sensitivity === "high"
+                        ? "High sensitivity — detects minor movements"
+                        : sensitivity === "medium"
+                        ? "Medium sensitivity — balanced detection"
+                        : "Low sensitivity — only large movements trigger alerts"
+                    : "Motion detection is disabled"}
+            </Text>
+        </View>
+    );
+}
+
+const vizStyles = StyleSheet.create({
+    container: {
+        borderRadius: 20,
+        borderWidth: 1,
+        padding: 16,
+        marginBottom: 20,
+        gap: 12,
+    },
+    labelRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+    },
+    label: {
+        flex: 1,
+        fontSize: 14,
+        fontWeight: "600",
+    },
+    badge: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 8,
+    },
+    badgeText: {
+        fontSize: 11,
+        fontWeight: "700",
+        letterSpacing: 0.5,
+    },
+    barsRow: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        gap: 5,
+        height: 40,
+    },
+    bar: {
+        flex: 1,
+        borderRadius: 4,
+    },
+    hint: {
+        fontSize: 12,
+        lineHeight: 16,
+    },
+});
 
 const styles = StyleSheet.create({
     container: {
