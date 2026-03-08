@@ -15,7 +15,7 @@ import {
 } from "react-native";
 import { API_BASE_URL } from "../../config";
 import { AppContext } from "../../context/app-context";
-
+import SigninForm from "../settings/signInForm";
 
 type EventCategory = "doorbell" | "access" | "motion";
 
@@ -167,7 +167,15 @@ export default function Events() {
         setCurrentYear(newYear);
     };
 
-    if (!user) return null;
+    if (!user) {
+        return (
+            <SafeAreaView style={{ flex: 1, backgroundColor: "#050505" }}>
+                <View style={styles.authContainer}>
+                    <SigninForm />
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>
