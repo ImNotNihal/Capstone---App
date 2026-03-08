@@ -36,7 +36,7 @@ export default function Sensors() {
             duration: 500,
             useNativeDriver: true,
         }).start();
-    }, []);
+    }, [fadeAnim]);
 
     const authHeaders = useCallback(() => {
         const h: Record<string, string> = { "Content-Type": "application/json" };
