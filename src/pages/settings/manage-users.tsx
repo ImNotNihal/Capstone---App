@@ -1,9 +1,9 @@
+import { API_BASE_URL } from "@/src/config";
+import { AppContext } from "@/src/context/app-context";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 import styles from "./styles";
-import { AppContext } from "@/src/context/app-context";
-import { API_BASE_URL } from "@/src/config";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 const VALID_METHODS = ["face", "fingerprint", "keypad", "bluetooth"] as const;
 type AuthMethod = (typeof VALID_METHODS)[number];
@@ -283,6 +283,7 @@ export default function ManageUsers() {
                                             <Switch
                                                 value={credentials[method]}
                                                 onValueChange={(v) => toggleMethod(method, v)}
+                                                disabled={isToggling}
                                             />
                                         )}
                                     </View>
