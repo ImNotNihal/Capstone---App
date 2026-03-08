@@ -3,11 +3,11 @@ import { useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
     Alert,
+    Platform,
     SafeAreaView,
     ScrollView,
     StatusBar,
     StyleSheet,
-    Switch,
     Text,
     TouchableOpacity,
     View
@@ -22,27 +22,44 @@ type FingerprintProfile = {
 
 export default function BiometricSettings() {
     const router = useRouter();
-    const [livenessDetection, setLivenessDetection] = useState(true);
 
-    const [prints, setPrints] = useState<FingerprintProfile[]>([
-        { id: "1", label: "Right Thumb", owner: "Benji (Me)", dateAdded: "Feb 12, 2026" },
-        { id: "2", label: "Left Index", owner: "Benji (Me)", dateAdded: "Feb 12, 2026" },
-        { id: "3", label: "Right Thumb", owner: "Sarah", dateAdded: "Mar 01, 2026" },
-    ]);
+    const [prints, setPrints] = useState<FingerprintProfile[]>([]);
 
-    const handleRemovePrint = (label: string, owner: string) => {
-        Alert.alert(
-            "Remove Fingerprint",
-            `Are you sure you want to delete ${owner}'s ${label}?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                { 
-                    text: "Remove", 
-                    style: "destructive",
-                    onPress: () => console.log("Deleted") 
-                }
-            ]
-        );
+    const handleAddPrint = () => {
+        const uniqueId = `print_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        const newPrint: FingerprintProfile = {
+            id: uniqueId,
+            label: `Fingerprint ${prints.length + 1}`,
+            owner: "Current User",
+            dateAdded: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        };
+        setPrints(prev => [...prev, newPrint]);
+    };
+
+    const handleRemovePrint = (id: string, label: string, owner: string) => {
+        // FIXED: Handle Web Browser popup limits vs Native Phone alerts
+        if (Platform.OS === 'web') {
+            const confirmed = window.confirm(`Are you sure you want to delete ${owner}'s ${label}?`);
+            if (confirmed) {
+                setPrints(currentPrints => currentPrints.filter(p => p.id !== id));
+            }
+        } else {
+            Alert.alert(
+                "Remove Fingerprint",
+                `Are you sure you want to delete ${owner}'s ${label}?`,
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { 
+                        text: "Delete", 
+                        style: "destructive",
+                        onPress: () => {
+                            setPrints(currentPrints => currentPrints.filter(p => p.id !== id));
+                        } 
+                    }
+                ],
+                { cancelable: true }
+            );
+        }
     };
 
     return (
@@ -58,10 +75,19 @@ export default function BiometricSettings() {
                 <View style={{ width: 40 }} />
             </View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            {/* keyboardShouldPersistTaps="always" guarantees taps bypass the scroll listener entirely */}
+            <ScrollView 
+                contentContainerStyle={styles.scrollContent} 
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="always"
+            >
                 
                 {/* REGISTER NEW PRINT */}
-                <TouchableOpacity style={styles.registerCard} activeOpacity={0.8}>
+                <TouchableOpacity 
+                    style={styles.registerCard} 
+                    activeOpacity={0.7} 
+                    onPress={handleAddPrint}
+                >
                     <View style={styles.registerIconWrapper}>
                         <MaterialCommunityIcons name="fingerprint" size={32} color="#10B981" />
                     </View>
@@ -74,27 +100,34 @@ export default function BiometricSettings() {
 
                 <Text style={styles.sectionLabel}>Registered Prints</Text>
 
-                {/* FINGERPRINT LIST */}
-                {prints.map((print) => (
-                    <View key={print.id} style={styles.printCard}>
-                        <View style={styles.printInfo}>
-                            <View style={styles.printIconSmall}>
-                                <MaterialCommunityIcons name="fingerprint" size={20} color="#71717A" />
-                            </View>
-                            <View style={{ marginLeft: 12 }}>
-                                <Text style={styles.printLabelText}>{print.label}</Text>
-                                <Text style={styles.printOwnerText}>{print.owner} • {print.dateAdded}</Text>
-                            </View>
-                        </View>
-
-                        <TouchableOpacity 
-                            onPress={() => handleRemovePrint(print.label, print.owner)}
-                            style={styles.deleteBtn}
-                        >
-                            <MaterialCommunityIcons name="minus-circle-outline" size={22} color="#EF4444" />
-                        </TouchableOpacity>
+                {/* FINGERPRINT LIST OR EMPTY STATE */}
+                {prints.length === 0 ? (
+                    <View style={styles.emptyState}>
+                        <Text style={styles.emptyStateText}>No fingerprints registered</Text>
                     </View>
-                ))}
+                ) : (
+                    prints.map((print) => (
+                        <View key={print.id} style={styles.printCard}>
+                            <View style={styles.printInfo}>
+                                <View style={styles.printIconSmall}>
+                                    <MaterialCommunityIcons name="fingerprint" size={20} color="#71717A" />
+                                </View>
+                                <View style={{ marginLeft: 12 }}>
+                                    <Text style={styles.printLabelText}>{print.label}</Text>
+                                    <Text style={styles.printOwnerText}>{print.owner} • {print.dateAdded}</Text>
+                                </View>
+                            </View>
+
+                            <TouchableOpacity 
+                                onPress={() => handleRemovePrint(print.id, print.label, print.owner)}
+                                style={styles.deleteBtn}
+                                activeOpacity={0.6}
+                            >
+                                <MaterialCommunityIcons name="minus-circle-outline" size={26} color="#EF4444" />
+                            </TouchableOpacity>
+                        </View>
+                    ))
+                )}
 
                 <Text style={styles.sectionLabel}>Hardware Security</Text>
 
@@ -102,38 +135,11 @@ export default function BiometricSettings() {
                 <View style={styles.configContainer}>
                     <View style={styles.configRow}>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.configTitle}>Liveness Detection</Text>
-                            <Text style={styles.configDesc}>Prevents spoofing via high-res latent print rejection</Text>
-                        </View>
-                        <Switch 
-                            value={livenessDetection}
-                            onValueChange={setLivenessDetection}
-                            trackColor={{ false: "#27272A", true: "#10B98150" }}
-                            thumbColor={livenessDetection ? "#10B981" : "#71717A"}
-                        />
-                    </View>
-
-                    <View style={styles.divider} />
-
-                    <View style={styles.configRow}>
-                        <View style={{ flex: 1 }}>
                             <Text style={styles.configTitle}>Attempt Lockout</Text>
                             <Text style={styles.configDesc}>Disable scanner for 5 mins after 5 failed tries</Text>
                         </View>
                         <MaterialCommunityIcons name="shield-alert-outline" size={24} color="#A1A1AA" />
                     </View>
-                </View>
-
-                {/* SENSOR HEALTH */}
-                <View style={styles.healthBox}>
-                    <View style={styles.healthHeader}>
-                        <Text style={styles.healthTitle}>Scanner Health</Text>
-                        <Text style={styles.healthStatus}>Optimal</Text>
-                    </View>
-                    <View style={styles.healthBarTrack}>
-                        <View style={[styles.healthBarFill, { width: '98%' }]} />
-                    </View>
-                    <Text style={styles.healthFooter}>Last cleaned/calibrated: 2 days ago</Text>
                 </View>
 
             </ScrollView>
@@ -145,26 +151,33 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#050505" },
     header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 12, paddingTop: 8, paddingBottom: 16 },
     headerTitle: { color: "#FAFAFA", fontSize: 18, fontWeight: "bold" },
-    backButton: { padding: 8 },
+    backButton: { padding: 12 },
     scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
     sectionLabel: { color: "#71717A", fontSize: 13, fontWeight: "bold", textTransform: "uppercase", marginBottom: 16, marginTop: 32 },
     
     // Register Card
     registerCard: { 
+        width: '100%',
         backgroundColor: "#10B98110", 
         borderRadius: 24, 
         padding: 20, 
         flexDirection: 'row', 
         alignItems: 'center', 
         borderWidth: 1, 
-        borderColor: '#10B98130' 
+        borderColor: '#10B98130',
+        zIndex: 10
     },
     registerIconWrapper: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#10B98120', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
     registerTitle: { color: "#10B981", fontSize: 18, fontWeight: "bold" },
     registerDesc: { color: "#10B98180", fontSize: 13, marginTop: 2 },
 
+    // Empty State
+    emptyState: { padding: 24, alignItems: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: '#27272A', borderRadius: 20 },
+    emptyStateText: { color: '#3F3F46', fontSize: 14, fontWeight: '500' },
+
     // Print Cards
     printCard: { 
+        width: '100%',
         backgroundColor: "#09090B", 
         borderRadius: 20, 
         padding: 16, 
@@ -173,27 +186,18 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: '#18181B',
-        marginBottom: 12
+        marginBottom: 12,
+        zIndex: 5
     },
-    printInfo: { flexDirection: 'row', alignItems: 'center' },
+    printInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
     printIconSmall: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#18181B', justifyContent: 'center', alignItems: 'center' },
     printLabelText: { color: "#FAFAFA", fontSize: 16, fontWeight: "600" },
     printOwnerText: { color: "#71717A", fontSize: 12, marginTop: 2 },
-    deleteBtn: { padding: 8 },
+    deleteBtn: { padding: 14, marginLeft: 8, zIndex: 10 },
 
     // Config Section
     configContainer: { backgroundColor: "#09090B", borderRadius: 24, padding: 20, borderWidth: 1, borderColor: '#18181B' },
     configRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     configTitle: { color: "#FAFAFA", fontSize: 15, fontWeight: "bold" },
-    configDesc: { color: "#71717A", fontSize: 12, marginTop: 4, paddingRight: 30, lineHeight: 18 },
-    divider: { height: 1, backgroundColor: '#18181B', marginVertical: 20 },
-
-    // Health Box
-    healthBox: { marginTop: 40, backgroundColor: '#09090B', padding: 20, borderRadius: 24, borderWidth: 1, borderColor: '#18181B' },
-    healthHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-    healthTitle: { color: '#71717A', fontSize: 13, fontWeight: 'bold' },
-    healthStatus: { color: '#10B981', fontSize: 13, fontWeight: 'bold' },
-    healthBarTrack: { width: '100%', height: 4, backgroundColor: '#18181B', borderRadius: 2, marginBottom: 12 },
-    healthBarFill: { height: '100%', backgroundColor: '#10B981', borderRadius: 2 },
-    healthFooter: { color: '#3F3F46', fontSize: 11, textAlign: 'center' }
+    configDesc: { color: "#71717A", fontSize: 12, marginTop: 4, paddingRight: 30, lineHeight: 18 }
 });
