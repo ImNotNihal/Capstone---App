@@ -1,3 +1,5 @@
+"use client"; // Mandatory for Context in Expo Router
+
 import { Toast } from "@/src/components/toast";
 import { API_BASE_URL } from "@/src/config";
 import { AppStorage } from "@/src/hooks/useAppStorage";
@@ -31,6 +33,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<any | null>(null);
     const [authToken, setAuthToken] = useState<string | null>(null);
     const [deviceId, setDeviceId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true); // Tracks initial session restoration
 
     const base_url = API_BASE_URL;
     const [isLocked, setIsLocked] = useState(false);
@@ -50,12 +53,9 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     const [requestLogs, setRequestLogs] = useState<RequestLogEntry[]>([]);
 
     const clearLogs = useCallback(() => setRequestLogs([]), []);
-
     const isWebBrowser = Platform.OS === "web";
-
     const wsRef = useRef<WebSocket | null>(null);
     const previousLockState = useRef<boolean | null>(null);
-
     const reconnectAttemptsRef = useRef(0);
     const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -66,20 +66,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    // ========== Dev-mode fetch interceptor ==========
     useEffect(() => {
         if (!isDevMode) return;
-        
-        // 1. Safely target the correct environment global (window for web, global for native)
         const envGlobal = typeof window !== "undefined" ? window : global;
-        
-        // 2. Bind strictly to that environment to prevent Illegal Invocation
         const originalFetch = envGlobal.fetch.bind(envGlobal); 
         
         envGlobal.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
             const id = String(Date.now() + Math.random());
             const method = (init?.method ?? "GET").toUpperCase();
-            
             const rawUrl = typeof input === 'string' ? input : (input && 'url' in input ? input.url : input.toString());
             const path = rawUrl.replace(API_BASE_URL, "").replace(/^\//, "");
             
@@ -93,7 +87,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             try {
                 const response = await originalFetch(input, init);
                 const durationMs = Date.now() - start;
-                
                 let responseData: any = null;
                 try { responseData = await response.clone().json(); } catch {}
                 
@@ -105,7 +98,6 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                     errorMessage: response.ok ? undefined : `HTTP ${response.status} ${response.statusText}`,
                     durationMs,
                 } : e));
-                
                 return response;
             } catch (error: any) {
                 const durationMs = Date.now() - start;
@@ -118,210 +110,112 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                 throw error;
             }
         };
-        
-        return () => { 
-            // 3. Restore the correct environment fetch on cleanup
-            envGlobal.fetch = originalFetch; 
-        };
+        return () => { envGlobal.fetch = originalFetch; };
     }, [isDevMode]);
 
     const authHeaders = useCallback(() => {
         const headers: Record<string, string> = {};
-        if (authToken) {
-            headers["Authorization"] = `Bearer ${authToken}`;
-        }
+        if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
         return headers;
     }, [authToken]);
 
     const httpLock = () => {
         if (!deviceId) return;
-        const url = `${base_url}send-command/${deviceId}/LOCK`;
-        return fetchWithTimeout(url, { method: "POST", headers: authHeaders() })
+        return fetchWithTimeout(`${base_url}send-command/${deviceId}/LOCK`, { method: "POST", headers: authHeaders() })
             .catch(e => console.warn("Lock command failed:", e));
     };
 
     const httpUnlock = () => {
         if (!deviceId) return;
-        const url = `${base_url}send-command/${deviceId}/UNLOCK`;
-        return fetchWithTimeout(url, { method: "POST", headers: authHeaders() })
+        return fetchWithTimeout(`${base_url}send-command/${deviceId}/UNLOCK`, { method: "POST", headers: authHeaders() })
             .catch(e => console.warn("Unlock command failed:", e));
     };
 
     const httpGetLockStatus = () => {
         if (!deviceId) return;
-
-        const url = `${base_url}status/${deviceId}`;
-        return fetchWithTimeout(url, { method: "GET", headers: authHeaders() })
+        return fetchWithTimeout(`${base_url}status/${deviceId}`, { method: "GET", headers: authHeaders() })
             .then((response) => response.json())
             .then((data) => {
-                const status = data?.status;
-                if (typeof status === "string") {
-                    setIsLocked(status === "LOCKED");
-                }
+                if (typeof data?.status === "string") setIsLocked(data.status === "LOCKED");
                 return data;
             })
-            .catch((e) => {
-                console.log("Status fetch error:", e);
-            });
+            .catch((e) => console.log("Status fetch error:", e));
     };
 
-    // Toast on lock state change
     useEffect(() => {
         if (previousLockState.current === null) {
             previousLockState.current = isLocked;
             return;
         }
-
-        const lockedNow = isLocked;
         setToastContent({
-            title: lockedNow ? "Door locked" : "Door unlocked",
-            message: lockedNow ? "Front door is secured." : "Front door is now open.",
-            variant: lockedNow ? "danger" : "success",
+            title: isLocked ? "Door locked" : "Door unlocked",
+            message: isLocked ? "Front door is secured." : "Front door is now open.",
+            variant: isLocked ? "danger" : "success",
         });
         setToastVisible(true);
-        previousLockState.current = lockedNow;
+        previousLockState.current = isLocked;
     }, [isLocked]);
 
-    // Restore session once on app start (async-safe)
+    // RESTORE SESSION (Now with loading state)
     useEffect(() => {
-        AppStorage.getSession().then((storedSession) => {
-            if (storedSession?.user) {
-                setUser(storedSession.user);
-            }
-            const storedToken =
-                storedSession?.token || storedSession?.accessToken || storedSession?.access_token;
-            if (storedToken) {
-                setAuthToken(storedToken);
-            }
-
-            const storedDeviceId =
-                storedSession?.user?.deviceId ||
-                storedSession?.user?.device_id ||
-                null;
-            if (storedDeviceId) {
-                setDeviceId(storedDeviceId);
-            }
-        });
+        AppStorage.getSession()
+            .then((storedSession) => {
+                if (storedSession?.user) setUser(storedSession.user);
+                const storedToken = storedSession?.token || storedSession?.accessToken || storedSession?.access_token;
+                if (storedToken) setAuthToken(storedToken);
+                const storedDeviceId = storedSession?.user?.deviceId || storedSession?.user?.device_id || null;
+                if (storedDeviceId) setDeviceId(storedDeviceId);
+            })
+            .finally(() => setLoading(false)); // Crucial: enables AuthGuard to proceed
     }, []);
 
-    // ========== WebSocket connection + async reconnection ==========
     const connectWebSocket = useCallback(() => {
-        if (!deviceId) {
-            console.log("WS: no deviceId, skipping connect");
-            return;
-        }
-
-        if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
-            console.log("WS: already connected/connecting, skipping new connection");
-            return;
-        }
-
+        if (!deviceId || (wsRef.current && wsRef.current.readyState <= 1)) return;
         clearReconnectTimeout();
+        let wsUrl = (base_url || "").replace(/^http/, "ws") + "ws/client";
+        if (Platform.OS === "web" && window.location.protocol === "https:") wsUrl = wsUrl.replace(/^ws:/, "wss:");
 
-        let wsUrl = (base_url || "")
-            .replace(/^http:\/\//, "ws://")
-            .replace(/^https:\/\//, "wss://") + "ws/client";
-
-        // FIX: Prevent "The operation is insecure" Mixed Content errors on web
-        if (Platform.OS === "web" && typeof window !== "undefined" && window.location.protocol === "https:") {
-            wsUrl = wsUrl.replace(/^ws:\/\//, "wss://");
-        }
-
-        console.log("Connecting WS client to:", wsUrl);
-
-        // 1. Move scheduleReconnect ABOVE so it can be used in the catch block
         const scheduleReconnect = () => {
             if (reconnectTimeoutRef.current) return;
-
             setIsDeviceConnected(false);
             wsRef.current = null;
-
-            const attempt = reconnectAttemptsRef.current;
-            const delay = Math.min(30000, 1000 * Math.pow(2, attempt));
-            reconnectAttemptsRef.current = attempt + 1;
-
-            console.log(`WS: scheduling reconnect in ${delay}ms (attempt ${attempt + 1})`);
-
+            const delay = Math.min(30000, 1000 * Math.pow(2, reconnectAttemptsRef.current));
+            reconnectAttemptsRef.current++;
             reconnectTimeoutRef.current = setTimeout(() => {
                 reconnectTimeoutRef.current = null;
-                if (!wsRef.current && deviceId) {
-                    connectWebSocket();
-                }
+                if (deviceId) connectWebSocket();
             }, delay);
         };
 
-        // 2. Wrap WebSocket initialization in a try/catch
         try {
             const ws = new WebSocket(wsUrl);
             wsRef.current = ws;
-
             ws.onopen = () => {
-                console.log("Client WS connected");
                 setIsDeviceConnected(true);
                 reconnectAttemptsRef.current = 0;
-
-                const subMsg = JSON.stringify({
-                    type: "subscribe",
-                    deviceId: deviceId,
-                });
-                ws.send(subMsg);
-
+                ws.send(JSON.stringify({ type: "subscribe", deviceId }));
                 httpGetLockStatus();
             };
-
-            ws.onmessage = (event) => {
+            ws.onmessage = (e) => {
                 try {
-                    console.log("WS message:", event.data);
-                    const data = JSON.parse(event.data);
-                    if (data.type === "status" && data.deviceId === deviceId) {
-                        if (typeof data.status === "string") {
-                            setIsLocked(data.status === "LOCKED");
-                        }
+                    const data = JSON.parse(e.data);
+                    if (data.type === "status" && data.deviceId === deviceId && typeof data.status === "string") {
+                        setIsLocked(data.status === "LOCKED");
                     }
-                } catch (e) {
-                    console.log("WS message parse error:", e);
-                }
+                } catch {}
             };
-
-            ws.onerror = (event) => {
-                console.log("WS error:", event);
-                scheduleReconnect();
-            };
-
-            ws.onclose = (event) => {
-                console.log("Client WS closed:", event?.code, event?.reason);
-                scheduleReconnect();
-            };
-        } catch (error) {
-            // Safely catch SecurityError and fallback to retry without crashing React
-            console.error("Failed to construct WebSocket safely:", error);
-            scheduleReconnect();
-        }
+            ws.onerror = scheduleReconnect;
+            ws.onclose = scheduleReconnect;
+        } catch { scheduleReconnect(); }
     }, [base_url, deviceId]);
 
-    // Create/cleanup WS when deviceId changes
     useEffect(() => {
         if (!deviceId) {
-            if (wsRef.current) {
-                wsRef.current.close();
-                wsRef.current = null;
-            }
-            clearReconnectTimeout();
-            setIsDeviceConnected(false);
+            if (wsRef.current) wsRef.current.close();
             return;
         }
-
         connectWebSocket();
-
-        return () => {
-            console.log("Cleaning up WS for device:", deviceId);
-            clearReconnectTimeout();
-            if (wsRef.current) {
-                wsRef.current.close();
-                wsRef.current = null;
-            }
-            setIsDeviceConnected(false);
-        };
+        return () => { if (wsRef.current) wsRef.current.close(); };
     }, [deviceId, connectWebSocket]);
 
     const signout = async () => {
@@ -330,126 +224,52 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setAuthToken(null);
         setDeviceId(null);
         setIsDevMode(false);
-        setRequestLogs([]);
-
-        clearReconnectTimeout();
-        if (wsRef.current) {
-            wsRef.current.close();
-            wsRef.current = null;
-        }
-        setIsDeviceConnected(false);
+        if (wsRef.current) wsRef.current.close();
     };
 
     const signin = async (email: string, password: string) => {
-        // Enable request logging if it's the test account
-        if (email === "test" && password === "test") {
-            setIsDevMode(true);
-        }
-
-        // Send the credentials to the REAL backend for all accounts, including 'test'
+        if (email === "test" && password === "test") setIsDevMode(true);
         const response = await fetchWithTimeout(`${base_url}auth/login`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email, password }),
         });
-
-        if (!response.ok) {
-            const errorBody = await response.json().catch(() => ({}));
-            const message =
-                errorBody?.detail || "Invalid credentials. Please try again.";
-            throw new Error(message);
-        }
-
+        if (!response.ok) throw new Error("Invalid credentials");
         const data = await response.json();
-        const accessToken = data?.access_token ?? data?.token ?? null;
-        const refreshToken = data?.refresh_token ?? null;
+        const token = data?.access_token ?? data?.token ?? null;
         setUser(data.user);
-        
-        if (accessToken) {
-            setAuthToken(accessToken);
-        }
-        
-        await AppStorage.setSession({ user: data.user, token: accessToken, refreshToken });
-
-        const nextDeviceId = data.user?.deviceId ?? data.user?.device_id;
-        if (nextDeviceId) {
-            setDeviceId(nextDeviceId);
-        }
+        if (token) setAuthToken(token);
+        await AppStorage.setSession({ user: data.user, token, refreshToken: data?.refresh_token });
+        if (data.user?.deviceId || data.user?.device_id) setDeviceId(data.user?.deviceId ?? data.user?.device_id);
     };
 
-    const signup = async (payload: {
-        email: string;
-        password: string;
-        firstName: string;
-        lastName: string;
-    }) => {
+    const signup = async (payload: any) => {
         const response = await fetchWithTimeout(`${base_url}auth/register`, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
         });
-
-        if (!response.ok) {
-            const errorBody = await response.json().catch(() => ({}));
-            const message =
-                errorBody?.detail || "Sign up failed. Please try again.";
-            throw new Error(message);
-        }
-
+        if (!response.ok) throw new Error("Sign up failed");
         const data = await response.json();
-        const accessToken = data?.access_token ?? data?.token ?? null;
-        const refreshToken = data?.refresh_token ?? null;
+        const token = data?.access_token ?? data?.token ?? null;
         setUser(data.user);
-        if (accessToken) {
-            setAuthToken(accessToken);
-        }
-        await AppStorage.setSession({ user: data.user, token: accessToken, refreshToken });
-
-        const nextDeviceId = data.user?.deviceId ?? data.user?.device_id;
-        if (nextDeviceId) {
-            setDeviceId(nextDeviceId);
-        }
-    };
-
-    const getCameraBaseUrl = () => {
-        if (!deviceId) return null;
-        return `${base_url}camera/${deviceId}`;
+        if (token) setAuthToken(token);
+        await AppStorage.setSession({ user: data.user, token, refreshToken: data?.refresh_token });
+        if (data.user?.deviceId || data.user?.device_id) setDeviceId(data.user?.deviceId ?? data.user?.device_id);
     };
 
     const contextValue = {
-        user,
-        deviceId,
-        httpLock,
-        httpUnlock,
-        isLocked,
-        signin,
-        signup,
-        signout,
-        authToken,
-        isWebBrowser,
-        cameraBaseUrl: getCameraBaseUrl(),
-        isDeviceConnected,
-        isDevMode,
-        requestLogs,
-        clearLogs,
+        user, loading, deviceId, httpLock, httpUnlock, isLocked,
+        signin, signup, signout, authToken, isWebBrowser,
+        cameraBaseUrl: deviceId ? `${base_url}camera/${deviceId}` : null,
+        isDeviceConnected, isDevMode, requestLogs, clearLogs,
     };
 
     return (
         <AppContext.Provider value={contextValue}>
             {children}
-            <Toast
-                visible={toastVisible}
-                title={toastContent.title}
-                message={toastContent.message}
-                variant={toastContent.variant}
-                placement="top"
-                offset={88}
-                onDismiss={() => setToastVisible(false)}
-            />
+            <Toast visible={toastVisible} title={toastContent.title} message={toastContent.message}
+                variant={toastContent.variant} placement="top" offset={88} onDismiss={() => setToastVisible(false)} />
         </AppContext.Provider>
     );
 };
