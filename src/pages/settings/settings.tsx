@@ -1,7 +1,7 @@
 import React, { ReactNode, useState, useContext } from "react";
 import { ActivityIndicator, ScrollView, Switch, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import styles from "./styles";
+import { createStyles } from "./styles";
 import { AppContext } from "@/src/context/app-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
@@ -10,7 +10,8 @@ import { useTheme } from "@/src/context/theme-context";
 
 export default function Settings() {
     const { user, deviceId, signout, isDeviceConnected } = useContext(AppContext);
-    const { isDark, toggleTheme } = useTheme();
+    const { isDark, toggleTheme, colors } = useTheme();
+    const styles = createStyles(colors);
     const router = useRouter();
     const { settings, loading, error, updatingKeys, updateSetting, refetch } = useSettings();
     const [settingsError, setSettingsError] = useState<string | null>(null);
@@ -37,6 +38,7 @@ export default function Settings() {
     };
 
     const isOffline = !!error;
+    const offlineStyles = makeOfflineStyles(colors);
 
     return (
         <ScrollView style={styles.screen} contentContainerStyle={styles.container}>
@@ -247,36 +249,38 @@ const InfoRow = ({ label, value }: { label: string; value: string }) => (
     </View>
 );
 
-const offlineStyles = {
-    banner: {
-        flexDirection: "row" as const,
-        alignItems: "center" as const,
-        justifyContent: "space-between" as const,
-        backgroundColor: "#18181B",
-        borderWidth: 1,
-        borderColor: "#27272A",
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        marginBottom: 8,
-    },
-    bannerText: {
-        color: "#A1A1AA",
-        fontSize: 13,
-        flexShrink: 1,
-        marginRight: 12,
-    },
-    updateButton: {
-        backgroundColor: "#2563eb",
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8,
-        minWidth: 72,
-        alignItems: "center" as const,
-    },
-    updateButtonText: {
-        color: "#fff",
-        fontWeight: "700" as const,
-        fontSize: 13,
-    },
-};
+function makeOfflineStyles(colors: any) {
+    return {
+        banner: {
+            flexDirection: "row" as const,
+            alignItems: "center" as const,
+            justifyContent: "space-between" as const,
+            backgroundColor: colors.bgSubtle,
+            borderWidth: 1,
+            borderColor: colors.border,
+            borderRadius: 10,
+            paddingHorizontal: 14,
+            paddingVertical: 10,
+            marginBottom: 8,
+        },
+        bannerText: {
+            color: colors.textSecond,
+            fontSize: 13,
+            flexShrink: 1,
+            marginRight: 12,
+        },
+        updateButton: {
+            backgroundColor: "#2563eb",
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            borderRadius: 8,
+            minWidth: 72,
+            alignItems: "center" as const,
+        },
+        updateButtonText: {
+            color: "#fff",
+            fontWeight: "700" as const,
+            fontSize: 13,
+        },
+    };
+}

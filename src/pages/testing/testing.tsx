@@ -14,8 +14,7 @@ import {
 
 import {useBLE} from "@/src/context/ble-context";
 import {AppContext} from "@/src/context/app-context";
-
-const base_url = "https://0dae5b628806.ngrok-free.app/";
+import {API_BASE_URL} from "@/src/config";
 
 const DEVICE_ID = "smartlock_D0DB64A84320";
 export default function Testing() {
@@ -46,17 +45,17 @@ export default function Testing() {
     }, [authToken]);
 
     const httpLock = () => {
-        const url = `${base_url}send-command/${DEVICE_ID}/LOCK`;
+        const url = `${API_BASE_URL}send-command/${DEVICE_ID}/LOCK`;
         return fetch(url, {method: "POST", headers: authHeaders()});
     };
 
     const httpUnlock = () => {
-        const url = `${base_url}send-command/${DEVICE_ID}/UNLOCK`;
+        const url = `${API_BASE_URL}send-command/${DEVICE_ID}/UNLOCK`;
         return fetch(url, {method: "POST", headers: authHeaders()});
     };
     
     const httpGetLockStatus = () => {
-        const url = `${base_url}status/${DEVICE_ID}`;
+        const url = `${API_BASE_URL}status/${DEVICE_ID}`;
         return fetch(url, {method: "GET", headers: authHeaders()})
             .then((response) => response.json())
             .then((data) => {
@@ -86,8 +85,8 @@ export default function Testing() {
 
     useFocusEffect(
         useCallback(() => {
-            // Derive WS URL from base_url
-            const wsUrl = (base_url || "")
+            // Derive WS URL from API_BASE_URL
+            const wsUrl = (API_BASE_URL || "")
                 .replace(/^http:\/\//, "ws://")
                 .replace(/^https:\/\//, "wss://") + "ws/client";
 
