@@ -189,7 +189,6 @@ export default function FacialSettings() {
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-                {/* ENROLL BUTTON */}
                 <TouchableOpacity style={styles.enrollCard} onPress={() => setIsEnrollOpen(true)} activeOpacity={0.8}>
                 
                 <TouchableOpacity style={styles.enrollCard} activeOpacity={0.8}>
@@ -255,7 +254,6 @@ export default function FacialSettings() {
                     ))
                 )}
 
-                {/* Storage info */}
                 <View style={styles.storageBox}>
                     <Text style={styles.storageText}>
                         Biometric Database: {profiles.length}/20 Slots Used
@@ -267,7 +265,6 @@ export default function FacialSettings() {
 
             </ScrollView>
 
-            {/* ENROLL MODAL */}
             <Modal visible={isEnrollOpen} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
@@ -410,43 +407,32 @@ const styles = StyleSheet.create({
     backButton: { padding: 8 },
     scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
     sectionLabel: { color: "#71717A", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 16, marginTop: 32 },
-    enrollCard: { backgroundColor: "#3B82F610", borderRadius: 24, padding: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#3B82F630' },
-    enrollIconWrapper: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#3B82F620', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
+    enrollCard: { backgroundColor: "#3B82F610", borderRadius: 24, padding: 20, flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#3B82F630" },
+    enrollIconWrapper: { width: 56, height: 56, borderRadius: 16, backgroundColor: "#3B82F620", justifyContent: "center", alignItems: "center", marginRight: 16 },
     enrollTitle: { color: "#3B82F6", fontSize: 16, fontWeight: "700" },
     enrollDesc: { color: "#3B82F680", fontSize: 13, marginTop: 2 },
     emptyState: { alignItems: "center", paddingVertical: 40, borderWidth: 1, borderStyle: "dashed", borderColor: "#27272A", borderRadius: 20, gap: 8 },
     emptyTitle: { color: "#71717A", fontSize: 15, fontWeight: "600" },
     emptySubtitle: { color: "#3F3F46", fontSize: 13 },
-    headerTitle: { color: "#FAFAFA", fontSize: 18, fontWeight: "bold" },
-    backButton: { padding: 8 },
-    scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
-    sectionLabel: { color: "#71717A", fontSize: 13, fontWeight: "bold", textTransform: "uppercase", marginBottom: 16, marginTop: 32 },
-    
-    enrollCard: { backgroundColor: "#3B82F610", borderRadius: 24, padding: 20, flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#3B82F630' },
-    enrollIconWrapper: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#3B82F620', justifyContent: 'center', alignItems: 'center', marginRight: 16 },
-    enrollTitle: { color: "#3B82F6", fontSize: 18, fontWeight: "bold" },
-    enrollDesc: { color: "#3B82F680", fontSize: 13, marginTop: 2 },
-
-    profileCard: { backgroundColor: "#09090B", borderRadius: 20, padding: 16, borderWidth: 1, borderColor: '#18181B', marginBottom: 12 },
-    profileInfo: { flexDirection: 'row', alignItems: 'flex-start' },
-    avatarPlaceholder: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#18181B', justifyContent: 'center', alignItems: 'center' },
-    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    profileCard: { backgroundColor: "#09090B", borderRadius: 20, padding: 16, borderWidth: 1, borderColor: "#18181B", marginBottom: 12 },
+    profileInfo: { flexDirection: "row", alignItems: "flex-start" },
+    avatarPlaceholder: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#18181B", justifyContent: "center", alignItems: "center" },
+    nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
     profileName: { color: "#FAFAFA", fontSize: 15, fontWeight: "600" },
     profileSubText: { color: "#71717A", fontSize: 12, marginTop: 2 },
-    scheduleDetailsText: { color: "#3B82F6", fontSize: 11, fontWeight: '500', marginTop: 4 },
-    scheduleBadge: { backgroundColor: '#3B82F620', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-    scheduleBadgeText: { color: '#3B82F6', fontSize: 10, fontWeight: '700' },
-    profileActions: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 12, justifyContent: 'flex-end', borderTopWidth: 1, borderTopColor: '#18181B', paddingTop: 12 },
+    scheduleDetailsText: { color: "#3B82F6", fontSize: 11, fontWeight: "500", marginTop: 4 },
+    scheduleBadge: { backgroundColor: "#3B82F620", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+    scheduleBadgeText: { color: "#3B82F6", fontSize: 10, fontWeight: "700" },
+    profileActions: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 12, justifyContent: "flex-end", borderTopWidth: 1, borderTopColor: "#18181B", paddingTop: 12 },
     iconActionBtn: { padding: 8 },
-    storageBox: { marginTop: 40, alignItems: 'center' },
-    storageText: { color: '#3F3F46', fontSize: 12, fontWeight: '600', marginBottom: 10 },
-    storageBarTrack: { width: '100%', height: 4, backgroundColor: '#18181B', borderRadius: 2 },
-    storageBarFill: { height: '100%', backgroundColor: '#3B82F6', borderRadius: 2 },
-    // Modal
-    modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: 'center', padding: 24 },
+    storageBox: { marginTop: 40, alignItems: "center" },
+    storageText: { color: "#3F3F46", fontSize: 12, fontWeight: "600", marginBottom: 10 },
+    storageBarTrack: { width: "100%", height: 4, backgroundColor: "#18181B", borderRadius: 2 },
+    storageBarFill: { height: "100%", backgroundColor: "#3B82F6", borderRadius: 2 },
+    modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "center", padding: 24 },
     modalContent: { backgroundColor: "#111111", borderRadius: 28, padding: 28, borderWidth: 1, borderColor: "#1F1F1F" },
-    modalTitle: { color: "#FAFAFA", fontSize: 20, fontWeight: "700", textAlign: 'center' },
-    modalSubtitle: { color: "#71717A", fontSize: 14, textAlign: 'center', marginTop: 8, marginBottom: 20 },
+    modalTitle: { color: "#FAFAFA", fontSize: 20, fontWeight: "700", textAlign: "center" },
+    modalSubtitle: { color: "#71717A", fontSize: 14, textAlign: "center", marginTop: 8, marginBottom: 20 },
     input: { backgroundColor: "#050505", height: 56, borderRadius: 12, color: "#FAFAFA", paddingHorizontal: 16, fontSize: 15, borderWidth: 1, borderColor: "#27272A" },
     fieldLabel: { color: "#71717A", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 8 },
     levelRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
@@ -454,12 +440,12 @@ const styles = StyleSheet.create({
     levelChipActive: { backgroundColor: "#3B82F6", borderColor: "#3B82F6" },
     levelChipText: { color: "#71717A", fontSize: 13, fontWeight: "600" },
     levelChipTextActive: { color: "#FAFAFA" },
-    errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF444415', padding: 12, borderRadius: 8, marginBottom: 16, gap: 8, borderWidth: 1, borderColor: '#EF444430' },
-    errorText: { color: '#EF4444', fontSize: 13 },
-    modalButtons: { flexDirection: 'row', gap: 12, marginTop: 24 },
-    cancelBtn: { flex: 1, height: 50, justifyContent: 'center', alignItems: 'center' },
+    errorBox: { flexDirection: "row", alignItems: "center", backgroundColor: "#EF444415", padding: 12, borderRadius: 8, marginBottom: 16, gap: 8, borderWidth: 1, borderColor: "#EF444430" },
+    errorText: { color: "#EF4444", fontSize: 13 },
+    modalButtons: { flexDirection: "row", gap: 12, marginTop: 24 },
+    cancelBtn: { flex: 1, height: 50, justifyContent: "center", alignItems: "center" },
     cancelBtnText: { color: "#71717A", fontWeight: "600", fontSize: 15 },
-    confirmBtn: { flex: 1, height: 50, backgroundColor: "#FAFAFA", borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    confirmBtn: { flex: 1, height: 50, backgroundColor: "#FAFAFA", borderRadius: 12, justifyContent: "center", alignItems: "center" },
     confirmBtnText: { color: "#050505", fontWeight: "700", fontSize: 15 },
 });
     profileName: { color: "#FAFAFA", fontSize: 16, fontWeight: "600" },
