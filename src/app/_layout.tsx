@@ -7,16 +7,19 @@ import { BleProvider } from "@/src/context/ble-context";
 import { AppProvider, AppContext } from "@/src/context/app-context";
 import { ThemeProvider, useTheme } from "@/src/context/theme-context";
 
-function AuthGuard({ children }: { children: React.ReactNode }) {
+// Auth redirect lives INSIDE ThemedShell so the Stack is always mounted first
+function ThemedShell() {
+    const { colors } = useTheme();
     const { user }   = useContext(AppContext);
+    const pathname   = usePathname();
     const segments   = useSegments();
     const router     = useRouter();
     const navState   = useRootNavigationState();
+    const isSignin   = pathname === "/signin";
 
     useEffect(() => {
-        // Wait until the navigator is mounted before redirecting
+        // Don't navigate until the Stack navigator is fully mounted
         if (!navState?.key) return;
-
         const onSignin = segments[0] === "signin";
         if (!user && !onSignin) {
             router.replace("/signin");
@@ -24,14 +27,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
             router.replace("/");
         }
     }, [user, segments, router, navState?.key]);
-
-    return <>{children}</>;
-}
-
-function ThemedShell() {
-    const { colors } = useTheme();
-    const pathname   = usePathname();
-    const isSignin   = pathname === "/signin";
 
     return (
         <SafeAreaView style={[styles.shell, { backgroundColor: colors.shellBg }]}>
@@ -66,9 +61,7 @@ export default function RootLayout() {
             <ThemeProvider>
                 <AppProvider>
                     <BleProvider>
-                        <AuthGuard>
-                            <ThemedShell />
-                        </AuthGuard>
+                        <ThemedShell />
                     </BleProvider>
                 </AppProvider>
             </ThemeProvider>

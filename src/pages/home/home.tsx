@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { WebView } from "react-native-webview";
 import { AppContext } from "../../context/app-context";
-import SigninForm from "../settings/signInForm";
+
 
 // --- Constants & Helpers ---
 const EVENT_LABELS: Record<string, string> = {
@@ -195,15 +195,7 @@ export default function Home() {
         }, [fetchLastActivity, fetchActiveMethods])
     );
 
-    if (!user) {
-        return (
-            <SafeAreaView style={{ flex: 1, backgroundColor: "#050505" }}>
-                <View style={styles.authContainer}>
-                    <SigninForm />
-                </View>
-            </SafeAreaView>
-        );
-    }
+    if (!user) return null;
 
     return (
         <SafeAreaView style={styles.container}>
