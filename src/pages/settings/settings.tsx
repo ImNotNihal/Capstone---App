@@ -1,21 +1,23 @@
-import React, { ReactNode, useState, useContext } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
+import React, { ReactNode, useState, useContext, useCallback } from "react";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { createStyles } from "./styles";
 import { AppContext } from "@/src/context/app-context";
+import { API_BASE_URL } from "@/src/config";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useSettings } from "@/src/hooks/useSettings";
 import { useTheme } from "@/src/context/theme-context";
 
 export default function Settings() {
-    const { user, deviceId, signout, isDeviceConnected } = useContext(AppContext);
+    const { user, deviceId, setDeviceId, signout, isDeviceConnected, authToken } = useContext(AppContext);
     const { isDark, toggleTheme, colors } = useTheme();
     const styles = createStyles(colors);
     const router = useRouter();
     const { settings, loading, error, updatingKeys, updateSetting, refetch } = useSettings();
     const [settingsError, setSettingsError] = useState<string | null>(null);
     const [retrying, setRetrying] = useState(false);
+    const [forgetting, setForgetting] = useState(false);
 
     useFocusEffect(() => {
         refetch();
@@ -35,6 +37,37 @@ export default function Settings() {
         setSettingsError(null);
         await refetch();
         setRetrying(false);
+    };
+
+    const handleForgetDevice = () => {
+        Alert.alert(
+            "Forget Device",
+            "This will remove all ownership data and make the device available for a new owner. This cannot be undone.",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Forget",
+                    style: "destructive",
+                    onPress: async () => {
+                        if (!deviceId) return;
+                        setForgetting(true);
+                        try {
+                            const headers: Record<string, string> = {};
+                            if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+                            await fetch(`${API_BASE_URL}devices/${deviceId}/forget`, {
+                                method: "DELETE",
+                                headers,
+                            });
+                            setDeviceId(null);
+                        } catch (e) {
+                            console.warn("Forget device failed:", e);
+                        } finally {
+                            setForgetting(false);
+                        }
+                    },
+                },
+            ],
+        );
     };
 
     const isOffline = !!error;
@@ -180,6 +213,21 @@ export default function Settings() {
                     <View style={[styles.card, styles.systemInfo]}>
                         <InfoRow label="Device ID" value={deviceId} />
                     </View>
+                )}
+
+                {deviceId && (
+                    <TouchableOpacity
+                        style={[styles.button, { backgroundColor: "#ef4444" }]}
+                        onPress={handleForgetDevice}
+                        activeOpacity={0.7}
+                        disabled={forgetting}
+                    >
+                        {forgetting ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                            <Text style={{ color: "#fff", fontWeight: "700", fontSize: 15 }}>Forget Device</Text>
+                        )}
+                    </TouchableOpacity>
                 )}
 
                 {user && (
