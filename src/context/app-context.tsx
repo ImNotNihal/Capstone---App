@@ -290,7 +290,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const contextValue = {
-        user, loading, deviceId, httpLock, httpUnlock, isLocked,
+        user, loading, deviceId, setDeviceId, httpLock, httpUnlock, isLocked,
         signin, signup, signout, authToken, isWebBrowser,
         cameraBaseUrl: deviceId ? `${base_url}camera/${deviceId}` : null,
         isDeviceConnected, isDevMode, requestLogs, clearLogs,
