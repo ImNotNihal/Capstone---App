@@ -32,6 +32,7 @@ function fetchWithTimeout(url: string, opts: RequestInit, timeoutMs = FETCH_TIME
 export const AppProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<any | null>(null);
     const [authToken, setAuthToken] = useState<string | null>(null);
+    const [refreshTokenState, setRefreshTokenState] = useState<string | null>(null);
     const [deviceId, setDeviceId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true); // Tracks initial session restoration
 
@@ -113,65 +114,102 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return () => { envGlobal.fetch = originalFetch; };
     }, [isDevMode]);
 
-    const authHeaders = useCallback(() => {
+    const authHeaders = useCallback((token?: string | null) => {
         const headers: Record<string, string> = {};
-        if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+        const t = token ?? authToken;
+        if (t) headers["Authorization"] = `Bearer ${t}`;
         return headers;
     }, [authToken]);
 
-    const httpLock = useCallback(async () => {
-    // 1. Validation: Prevent execution if the user isn't logged in or has no device
-    if (!deviceId || !authToken) {
-        console.warn("[AppContext] Lock aborted: Missing deviceId or authToken");
-        return;
-    }
-
-    setIsLocked(true); // Optimistic UI update
-
-    try {
-        // 2. Routing: Use the global API_BASE_URL
-        const url = `${API_BASE_URL}send-command/${deviceId}/LOCK`;
-        
-        const response = await fetch(url, {
-            method: "POST",
-            headers: {
-                ...authHeaders(), // Must include 'Authorization': 'Bearer <token>'
-                "Content-Type": "application/json",
-            },
-        });
-
-        if (!response.ok) {
-            throw new Error(`Server responded with ${response.status}`);
-        }
-
-        console.log("[AppContext] Lock command sent successfully");
-        return response;
-    } catch (e) {
-        setIsLocked(false); // Revert UI state on network or server failure
-        console.error("[AppContext] Lock command failed:", e);
-    }
-}, [deviceId, authToken, authHeaders]);
-
-    const httpUnlock = () => {
-        if (!deviceId) return;
-        setIsLocked(false); // optimistic update
-        return fetchWithTimeout(`${base_url}send-command/${deviceId}/UNLOCK`, { method: "POST", headers: authHeaders() })
-            .catch(e => {
-                setIsLocked(true); // revert on failure
-                console.warn("Unlock command failed:", e);
+    // Attempt to get a fresh access token using the stored refresh token.
+    // Returns the new access token string on success, or null on failure.
+    const refreshAuthToken = useCallback(async (): Promise<string | null> => {
+        const stored = await AppStorage.getSession();
+        const rt = stored?.refreshToken ?? refreshTokenState;
+        if (!rt) return null;
+        try {
+            const res = await fetch(`${API_BASE_URL}auth/refresh`, {
+                method: "POST",
+                headers: { Authorization: `Bearer ${rt}` },
             });
-    };
+            if (!res.ok) return null;
+            const data = await res.json();
+            const newToken = data?.access_token ?? data?.token ?? null;
+            if (newToken) {
+                setAuthToken(newToken);
+                await AppStorage.setSession({ ...stored, token: newToken });
+            }
+            return newToken;
+        } catch {
+            return null;
+        }
+    }, [refreshTokenState]);
 
-    const httpGetLockStatus = () => {
+    // Authenticated fetch that automatically retries once after refreshing the token on 401.
+    const fetchWithAuth = useCallback(async (url: string, opts: RequestInit = {}): Promise<Response> => {
+        const res = await fetchWithTimeout(url, {
+            ...opts,
+            headers: { ...authHeaders(), ...(opts.headers as Record<string, string> ?? {}) },
+        });
+        if (res.status === 401) {
+            const newToken = await refreshAuthToken();
+            if (newToken) {
+                return fetchWithTimeout(url, {
+                    ...opts,
+                    headers: { ...authHeaders(newToken), ...(opts.headers as Record<string, string> ?? {}) },
+                });
+            }
+        }
+        return res;
+    }, [authHeaders, refreshAuthToken]);
+
+    const httpLock = useCallback(async () => {
+        if (!deviceId) {
+            console.warn("[AppContext] Lock aborted: Missing deviceId");
+            return;
+        }
+        setIsLocked(true); // optimistic update
+        try {
+            const response = await fetchWithAuth(`${API_BASE_URL}send-command/${deviceId}/LOCK`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+            });
+            if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+            return response;
+        } catch (e) {
+            setIsLocked(false); // revert on failure
+            console.error("[AppContext] Lock command failed:", e);
+        }
+    }, [deviceId, fetchWithAuth]);
+
+    const httpUnlock = useCallback(async () => {
+        if (!deviceId) {
+            console.warn("[AppContext] Unlock aborted: Missing deviceId");
+            return;
+        }
+        setIsLocked(false); // optimistic update
+        try {
+            const response = await fetchWithAuth(`${base_url}send-command/${deviceId}/UNLOCK`, {
+                method: "POST",
+            });
+            if (!response.ok) throw new Error(`Server responded with ${response.status}`);
+            return response;
+        } catch (e) {
+            setIsLocked(true); // revert on failure
+            console.warn("[AppContext] Unlock command failed:", e);
+        }
+    }, [deviceId, fetchWithAuth]);
+
+    const httpGetLockStatus = useCallback(() => {
         if (!deviceId) return;
-        return fetchWithTimeout(`${base_url}status/${deviceId}`, { method: "GET", headers: authHeaders() })
+        return fetchWithAuth(`${base_url}status/${deviceId}`, { method: "GET" })
             .then((response) => response.json())
             .then((data) => {
                 if (typeof data?.status === "string") setIsLocked(data.status === "LOCKED");
                 return data;
             })
             .catch((e) => console.log("Status fetch error:", e));
-    };
+    }, [deviceId, fetchWithAuth]);
 
     useEffect(() => {
         if (previousLockState.current === null) {
@@ -190,12 +228,52 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     // RESTORE SESSION (Now with loading state)
     useEffect(() => {
         AppStorage.getSession()
-            .then((storedSession) => {
+            .then(async (storedSession) => {
                 if (storedSession?.user) setUser(storedSession.user);
+
                 const storedToken = storedSession?.token || storedSession?.accessToken || storedSession?.access_token;
-                if (storedToken) setAuthToken(storedToken);
+                const storedRefreshToken = storedSession?.refreshToken || storedSession?.refresh_token || null;
+                if (storedRefreshToken) setRefreshTokenState(storedRefreshToken);
+
                 const storedDeviceId = storedSession?.user?.deviceId || storedSession?.user?.device_id || null;
                 if (storedDeviceId) setDeviceId(storedDeviceId);
+
+                // If the stored access token looks expired, proactively refresh it.
+                // JWT payload is base64(header).base64(payload).signature — decode without verify.
+                let tokenValid = false;
+                if (storedToken) {
+                    try {
+                        const payload = JSON.parse(atob(storedToken.split('.')[1]));
+                        tokenValid = payload.exp && payload.exp * 1000 > Date.now();
+                    } catch {
+                        tokenValid = false;
+                    }
+                }
+
+                if (tokenValid) {
+                    setAuthToken(storedToken!);
+                } else if (storedRefreshToken) {
+                    // Expired or missing — attempt a silent refresh
+                    try {
+                        const res = await fetch(`${API_BASE_URL}auth/refresh`, {
+                            method: "POST",
+                            headers: { Authorization: `Bearer ${storedRefreshToken}` },
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            const newToken = data?.access_token ?? data?.token ?? null;
+                            if (newToken) {
+                                setAuthToken(newToken);
+                                await AppStorage.setSession({ ...storedSession, token: newToken });
+                            }
+                        }
+                    } catch {
+                        // Network error — set whatever we have and let in-flight retries handle it
+                        if (storedToken) setAuthToken(storedToken);
+                    }
+                } else if (storedToken) {
+                    setAuthToken(storedToken);
+                }
             })
             .finally(() => setLoading(false)); // Crucial: enables AuthGuard to proceed
     }, []);
@@ -253,6 +331,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         await AppStorage.clearSession();
         setUser(null);
         setAuthToken(null);
+        setRefreshTokenState(null);
         setDeviceId(null);
         setIsDevMode(false);
         if (wsRef.current) wsRef.current.close();
@@ -268,9 +347,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (!response.ok) throw new Error("Invalid credentials");
         const data = await response.json();
         const token = data?.access_token ?? data?.token ?? null;
+        const rt = data?.refresh_token ?? null;
         setUser(data.user);
         if (token) setAuthToken(token);
-        await AppStorage.setSession({ user: data.user, token, refreshToken: data?.refresh_token });
+        if (rt) setRefreshTokenState(rt);
+        await AppStorage.setSession({ user: data.user, token, refreshToken: rt });
         if (data.user?.deviceId || data.user?.device_id) setDeviceId(data.user?.deviceId ?? data.user?.device_id);
     };
 
@@ -283,9 +364,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (!response.ok) throw new Error("Sign up failed");
         const data = await response.json();
         const token = data?.access_token ?? data?.token ?? null;
+        const rt = data?.refresh_token ?? null;
         setUser(data.user);
         if (token) setAuthToken(token);
-        await AppStorage.setSession({ user: data.user, token, refreshToken: data?.refresh_token });
+        if (rt) setRefreshTokenState(rt);
+        await AppStorage.setSession({ user: data.user, token, refreshToken: rt });
         if (data.user?.deviceId || data.user?.device_id) setDeviceId(data.user?.deviceId ?? data.user?.device_id);
     };
 
