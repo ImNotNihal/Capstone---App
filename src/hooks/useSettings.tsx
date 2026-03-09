@@ -61,7 +61,7 @@ export function useSettings() {
     }, [authToken]);
 
     const fetchSettings = useCallback(async () => {
-        if (!deviceId || !authToken) {
+        if (!deviceId) {
             setSettings(DEFAULTS);
             setLoading(false);
             setError(null);
