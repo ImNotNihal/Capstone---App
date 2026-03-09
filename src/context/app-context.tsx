@@ -163,53 +163,34 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         return res;
     }, [authHeaders, refreshAuthToken]);
 
-    const httpLock = useCallback(async () => {
+    const httpLock = useCallback(() => {
         if (!deviceId) {
             console.warn("[AppContext] Lock aborted: Missing deviceId");
             return;
         }
-        setIsLocked(true); // optimistic update
-        try {
-            const response = await fetchWithAuth(`${API_BASE_URL}send-command/${deviceId}/LOCK`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-            });
-            if (!response.ok) throw new Error(`Server responded with ${response.status}`);
-            return response;
-        } catch (e) {
-            setIsLocked(false); // revert on failure
-            console.error("[AppContext] Lock command failed:", e);
-        }
-    }, [deviceId, fetchWithAuth]);
+        const url = `${API_BASE_URL}send-command/${deviceId}/LOCK`;
+        return fetch(url, { method: "POST", headers: authHeaders() });
+    }, [deviceId, authHeaders]);
 
-    const httpUnlock = useCallback(async () => {
+    const httpUnlock = useCallback(() => {
         if (!deviceId) {
             console.warn("[AppContext] Unlock aborted: Missing deviceId");
             return;
         }
-        setIsLocked(false); // optimistic update
-        try {
-            const response = await fetchWithAuth(`${base_url}send-command/${deviceId}/UNLOCK`, {
-                method: "POST",
-            });
-            if (!response.ok) throw new Error(`Server responded with ${response.status}`);
-            return response;
-        } catch (e) {
-            setIsLocked(true); // revert on failure
-            console.warn("[AppContext] Unlock command failed:", e);
-        }
-    }, [deviceId, fetchWithAuth]);
+        const url = `${API_BASE_URL}send-command/${deviceId}/UNLOCK`;
+        return fetch(url, { method: "POST", headers: authHeaders() });
+    }, [deviceId, authHeaders]);
 
     const httpGetLockStatus = useCallback(() => {
         if (!deviceId) return;
-        return fetchWithAuth(`${base_url}status/${deviceId}`, { method: "GET" })
+        return fetch(`${API_BASE_URL}status/${deviceId}`, { method: "GET", headers: authHeaders() })
             .then((response) => response.json())
             .then((data) => {
                 if (typeof data?.status === "string") setIsLocked(data.status === "LOCKED");
                 return data;
             })
             .catch((e) => console.log("Status fetch error:", e));
-    }, [deviceId, fetchWithAuth]);
+    }, [deviceId, authHeaders]);
 
     useEffect(() => {
         if (previousLockState.current === null) {
