@@ -12,8 +12,52 @@ import {
 import { useBLE } from '@/src/context/ble-context';
 import { AppContext } from '@/src/context/app-context';
 import { API_BASE_URL } from '@/src/config';
+import { AppStorage } from '@/src/hooks/useAppStorage';
 
 const DEVICE_WS_URL = API_BASE_URL.replace(/^https?:\/\//, 'wss://').replace(/\/$/, '');
+
+/** Retry a claim request up to `maxAttempts` times, waiting `delayMs` between tries.
+ *  This accounts for the delay between BLE provisioning and the device registering
+ *  its pairing code with the backend after rebooting into WiFi mode. */
+async function claimWithRetry(
+    deviceId: string,
+    pairingCode: string,
+    authToken: string | null,
+    maxAttempts = 6,
+    delayMs = 3000,
+): Promise<Response> {
+    for (let i = 0; i < maxAttempts; i++) {
+        const response = await fetch(
+            `${API_BASE_URL}devices/${deviceId}/claim`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+                },
+                body: JSON.stringify({ pairingCode }),
+            },
+        );
+
+        if (response.ok) return response;
+
+        // "Pairing not active" means the device hasn't connected to the
+        // server yet — wait and retry.
+        const body = await response.json().catch(() => ({}));
+        const isNotReady = response.status === 400 && /pairing not active/i.test(body?.detail ?? '');
+
+        if (!isNotReady || i === maxAttempts - 1) {
+            // Non-retryable error, or last attempt — propagate
+            const err: any = new Error(body.detail || `Claim failed (${response.status})`);
+            err.status = response.status;
+            throw err;
+        }
+
+        console.log(`[AddDevice] Pairing not active yet, retrying in ${delayMs}ms (${i + 1}/${maxAttempts})`);
+        await new Promise(r => setTimeout(r, delayMs));
+    }
+    throw new Error('Claim timed out');
+}
 
 export default function AddDeviceScreen() {
     const router = useRouter();
@@ -36,7 +80,7 @@ export default function AddDeviceScreen() {
     const [wifiPassword, setWifiPassword] = useState('');
     const [deviceName, setDeviceName] = useState('');
 
-    // Captured from BLE during Step 2
+    // Captured from BLE
     const [capturedDeviceId, setCapturedDeviceId] = useState<string | null>(null);
     const [capturedPairingCode, setCapturedPairingCode] = useState<string | null>(null);
 
@@ -44,6 +88,7 @@ export default function AddDeviceScreen() {
     const [sending, setSending] = useState(false);
     const [claiming, setClaiming] = useState(false);
     const [claimError, setClaimError] = useState<string | null>(null);
+    const [claimStatus, setClaimStatus] = useState('');
 
     // Start BLE scan when entering Step 1
     useEffect(() => {
@@ -63,19 +108,67 @@ export default function AddDeviceScreen() {
         };
     }, []);
 
-    // Auto-advance to Step 2 when a device connects
+    // When a device connects: read state char IMMEDIATELY (before WiFi
+    // provisioning triggers a reboot), then advance to Step 2.
     useEffect(() => {
-        if (connectedDevice && step === 1) {
+        if (!connectedDevice || step !== 1) return;
+        let cancelled = false;
+
+        const readAndAdvance = async () => {
             stopScan();
             setScanning(false);
-            // The BLE device name IS the deviceId (e.g. "smartlock_1A2B3C4D")
+
+            // Capture deviceId from BLE device name
             const bleDeviceId = (connectedDevice.name || connectedDevice.localName || '').trim();
-            if (bleDeviceId) {
-                setCapturedDeviceId(bleDeviceId);
+            if (bleDeviceId) setCapturedDeviceId(bleDeviceId);
+
+            // Read pairing data from the state characteristic while the BLE
+            // connection is still alive (device hasn't rebooted yet).
+            try {
+                const stateData = await readLockState(connectedDevice);
+                if (stateData && !cancelled) {
+                    try {
+                        const parsed = JSON.parse(stateData);
+                        if (parsed.pairingCode) {
+                            setCapturedPairingCode(parsed.pairingCode);
+                            // Persist so it survives page navigation / app restart
+                            await AppStorage.set('pendingPairingCode', parsed.pairingCode);
+                        }
+                        if (parsed.deviceId) {
+                            setCapturedDeviceId(parsed.deviceId);
+                            await AppStorage.set('pendingDeviceId', parsed.deviceId);
+                        }
+                    } catch {
+                        if (stateData.trim().length > 0) {
+                            setCapturedPairingCode(stateData.trim());
+                            await AppStorage.set('pendingPairingCode', stateData.trim());
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log('[AddDevice] Could not read state char:', e);
             }
-            setStep(2);
-        }
+
+            if (!cancelled) setStep(2);
+        };
+
+        readAndAdvance();
+        return () => { cancelled = true; };
     }, [connectedDevice, step]);
+
+    // Restore persisted pairing data on mount (in case the page was re-opened)
+    useEffect(() => {
+        (async () => {
+            if (!capturedPairingCode) {
+                const saved = await AppStorage.get('pendingPairingCode');
+                if (saved) setCapturedPairingCode(saved);
+            }
+            if (!capturedDeviceId) {
+                const saved = await AppStorage.get('pendingDeviceId');
+                if (saved) setCapturedDeviceId(saved);
+            }
+        })();
+    }, []);
 
     const namedDevices = allDevices.filter((d: any) => {
         const name = (d.name || '').trim() || (d.localName || '').trim();
@@ -90,7 +183,8 @@ export default function AddDeviceScreen() {
         if (!wifiNetwork.trim()) return;
         setSending(true);
 
-        // Send WiFi credentials + backend URL via BLE
+        // Send WiFi credentials + backend URL via BLE.
+        // The device will reboot immediately after receiving these.
         await sendCommand(
             JSON.stringify({
                 ssid: wifiNetwork.trim(),
@@ -100,30 +194,6 @@ export default function AddDeviceScreen() {
             connectedDevice,
         );
 
-        // Read the pairing code from the state characteristic
-        // The ESP32 writes JSON { "deviceId": "...", "pairingCode": "..." } to it
-        try {
-            const stateData = await readLockState(connectedDevice);
-            if (stateData) {
-                try {
-                    const parsed = JSON.parse(stateData);
-                    if (parsed.pairingCode) {
-                        setCapturedPairingCode(parsed.pairingCode);
-                    }
-                    if (parsed.deviceId && !capturedDeviceId) {
-                        setCapturedDeviceId(parsed.deviceId);
-                    }
-                } catch {
-                    // If the state char returns a plain string, use it as pairing code
-                    if (stateData.trim().length > 0) {
-                        setCapturedPairingCode(stateData.trim());
-                    }
-                }
-            }
-        } catch (e) {
-            console.log('[AddDevice] Could not read state characteristic:', e);
-        }
-
         setSending(false);
         setStep(3);
     };
@@ -132,33 +202,26 @@ export default function AddDeviceScreen() {
         setStep(4);
         setClaiming(true);
         setClaimError(null);
+        setClaimStatus('');
 
         if (!capturedDeviceId || !capturedPairingCode) {
-            setClaimError('Missing device ID or pairing code from hardware.');
+            setClaimError(
+                'Missing device ID or pairing code. The BLE state characteristic ' +
+                'could not be read. Please go back and re-pair the device.',
+            );
             setClaiming(false);
             return;
         }
 
         try {
-            const response = await fetch(
-                `${API_BASE_URL}devices/${capturedDeviceId}/claim`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-                    },
-                    body: JSON.stringify({ pairingCode: capturedPairingCode }),
-                },
-            );
+            setClaimStatus('Waiting for device to connect to cloud…');
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.detail || `Claim failed (${response.status})`);
-            }
+            await claimWithRetry(capturedDeviceId, capturedPairingCode, authToken);
 
-            // Claim succeeded — update global device state
+            // Claim succeeded — update global device state and clean up
             setDeviceId(capturedDeviceId);
+            await AppStorage.remove('pendingPairingCode');
+            await AppStorage.remove('pendingDeviceId');
 
             // Disconnect BLE (device has already rebooted to WiFi mode)
             disconnectFromDevice(connectedDevice?.id);
@@ -167,10 +230,10 @@ export default function AddDeviceScreen() {
             setClaimError(e.message || 'Failed to claim device.');
         } finally {
             setClaiming(false);
+            setClaimStatus('');
         }
     };
 
-    const nextStep = () => setStep(step + 1);
     const prevStep = () => setStep(step - 1);
 
     return (
@@ -232,6 +295,11 @@ export default function AddDeviceScreen() {
                                     Connected: {capturedDeviceId}
                                 </Text>
                             )}
+                            {capturedPairingCode && (
+                                <Text style={[styles.stepDescription, { color: '#10B981' }]}>
+                                    Pairing code captured
+                                </Text>
+                            )}
                             <View style={styles.inputGroup}>
                                 <TextInput
                                     style={styles.input}
@@ -279,7 +347,7 @@ export default function AddDeviceScreen() {
                                     <ActivityIndicator size="large" color="#2563eb" />
                                     <Text style={styles.stepTitle}>Claiming Device…</Text>
                                     <Text style={styles.stepDescription}>
-                                        Registering your smart lock with the server.
+                                        {claimStatus || 'Registering your smart lock with the server.'}
                                     </Text>
                                 </>
                             ) : claimError ? (
@@ -317,7 +385,6 @@ export default function AddDeviceScreen() {
                     )}
 
                     {step === 1 ? (
-                        // Step 1: no next button, user taps a device to connect
                         <View style={styles.flex1} />
                     ) : step === 2 ? (
                         <TouchableOpacity
@@ -348,7 +415,6 @@ export default function AddDeviceScreen() {
                             style={[styles.button, styles.buttonPrimary, styles.flex1]}
                             onPress={() => {
                                 if (claimError) {
-                                    // Allow retry
                                     handleFinishSetup();
                                 } else {
                                     router.replace('/');

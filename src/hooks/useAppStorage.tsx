@@ -75,6 +75,22 @@ export class AppStorage {
             await AsyncStorage.multiRemove(['session', 'user']);
         }
     }
+
+    /** Generic key-value helpers for non-session data (e.g. pending pairing). */
+    static async get(key: string): Promise<string | null> {
+        if (Platform.OS === 'web') return webGet(key);
+        return AsyncStorage.getItem(key);
+    }
+
+    static async set(key: string, value: string): Promise<void> {
+        if (Platform.OS === 'web') { webSet(key, value); return; }
+        await AsyncStorage.setItem(key, value);
+    }
+
+    static async remove(key: string): Promise<void> {
+        if (Platform.OS === 'web') { webRemove(key); return; }
+        await AsyncStorage.removeItem(key);
+    }
 }
 
 // ─── Hook (kept for backwards compatibility) ──────────────────────────────────
