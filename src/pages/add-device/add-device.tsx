@@ -13,8 +13,12 @@ import {
     View,
 } from "react-native";
 import { useBLE } from "@/src/context/ble-context";
+import { API_BASE_URL } from "@/src/config";
 
-type Step = "scan" | "wifi" | "backend" | "done";
+// Convert the HTTPS API base URL to a WSS URL for the ESP32 WebSocket connection
+const DEVICE_WS_URL = API_BASE_URL.replace(/^https?:\/\//, "wss://").replace(/\/$/, "");
+
+type Step = "scan" | "wifi" | "done";
 
 export default function AddDevice() {
     const router = useRouter();
@@ -30,12 +34,11 @@ export default function AddDevice() {
         sendCommand,
     } = useBLE();
 
-    const [step,            setStep]            = useState<Step>("scan");
-    const [scanning,        setScanning]        = useState(false);
-    const [ssid,            setSsid]            = useState("");
-    const [wifiPassword,    setWifiPassword]    = useState("");
-    const [backendEndpoint, setBackendEndpoint] = useState("");
-    const [sending,         setSending]         = useState(false);
+    const [step,         setStep]      = useState<Step>("scan");
+    const [scanning,     setScanning]  = useState(false);
+    const [ssid,         setSsid]      = useState("");
+    const [wifiPassword, setWifiPassword] = useState("");
+    const [sending,      setSending]   = useState(false);
 
     // Start BLE scan on mount
     useEffect(() => {
@@ -76,20 +79,21 @@ export default function AddDevice() {
     const handleSendWifi = async () => {
         if (!ssid.trim()) return;
         setSending(true);
-        await sendCommand(JSON.stringify({ ssid: ssid.trim(), password: wifiPassword }), connectedDevice);
-        setSending(false);
-        setStep("backend");
-    };
-
-    const handleSendBackend = async () => {
-        if (!backendEndpoint.trim()) return;
-        setSending(true);
-        await sendCommand(JSON.stringify({ backendBaseUrl: backendEndpoint.trim() }), connectedDevice);
+        // Send WiFi credentials and the cloud backend URL in a single BLE write.
+        // The device will save both, mark itself as provisioned, and switch to WiFi mode.
+        await sendCommand(
+            JSON.stringify({
+                ssid: ssid.trim(),
+                password: wifiPassword,
+                backendBaseUrl: DEVICE_WS_URL,
+            }),
+            connectedDevice,
+        );
         setSending(false);
         setStep("done");
     };
 
-    const stepIndex = { scan: 0, wifi: 1, backend: 2, done: 3 }[step];
+    const stepIndex = { scan: 0, wifi: 1, done: 2 }[step];
 
     return (
         <SafeAreaView style={styles.container}>
@@ -106,7 +110,7 @@ export default function AddDevice() {
 
             {/* Step indicator */}
             <View style={styles.stepRow}>
-                {["Scan", "Wi-Fi", "Server", "Done"].map((label, i) => (
+                {["Scan", "Wi-Fi", "Done"].map((label, i) => (
                     <React.Fragment key={i}>
                         <View style={styles.stepItem}>
                             <View style={[styles.stepDot, i <= stepIndex && styles.stepDotActive]}>
@@ -122,7 +126,7 @@ export default function AddDevice() {
                                 {label}
                             </Text>
                         </View>
-                        {i < 3 && <View style={[styles.stepLine, i < stepIndex && styles.stepLineActive]} />}
+                        {i < 2 && <View style={[styles.stepLine, i < stepIndex && styles.stepLineActive]} />}
                     </React.Fragment>
                 ))}
             </View>
@@ -236,51 +240,7 @@ export default function AddDevice() {
                     </>
                 )}
 
-                {/* ── STEP 3: BACKEND ── */}
-                {step === "backend" && (
-                    <>
-                        <View style={styles.connectedBanner}>
-                            <MaterialCommunityIcons name="check-circle" size={20} color="#10B981" />
-                            <Text style={styles.connectedText}>Wi-Fi credentials sent</Text>
-                        </View>
-
-                        <View style={styles.formCard}>
-                            <Text style={styles.formTitle}>Backend Server</Text>
-                            <Text style={styles.formSubtitle}>
-                                Enter the base URL of the server this device should communicate with.
-                            </Text>
-
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Server URL</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={backendEndpoint}
-                                    onChangeText={setBackendEndpoint}
-                                    placeholder="http://192.168.1.10:8000"
-                                    placeholderTextColor="#3F3F46"
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                    keyboardType="url"
-                                />
-                            </View>
-
-                            <TouchableOpacity
-                                style={[styles.primaryBtn, (!backendEndpoint.trim() || sending) && styles.primaryBtnDisabled]}
-                                onPress={handleSendBackend}
-                                disabled={!backendEndpoint.trim() || sending}
-                                activeOpacity={0.8}
-                            >
-                                {sending ? (
-                                    <ActivityIndicator size="small" color="#050505" />
-                                ) : (
-                                    <Text style={styles.primaryBtnText}>Send to Device</Text>
-                                )}
-                            </TouchableOpacity>
-                        </View>
-                    </>
-                )}
-
-                {/* ── STEP 4: DONE ── */}
+                {/* ── STEP 3: DONE ── */}
                 {step === "done" && (
                     <View style={styles.doneCard}>
                         <View style={styles.doneIcon}>
