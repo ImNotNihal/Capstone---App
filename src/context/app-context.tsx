@@ -137,7 +137,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             const newToken = data?.access_token ?? data?.token ?? null;
             if (newToken) {
                 setAuthToken(newToken);
-                await AppStorage.setSession({ ...stored, token: newToken });
+                // Restore user + deviceId from refresh response
+                const refreshedUser = data?.user;
+                if (refreshedUser) {
+                    setUser(refreshedUser);
+                    const did = refreshedUser.deviceId ?? refreshedUser.device_id ?? null;
+                    if (did) setDeviceId(did);
+                }
+                await AppStorage.setSession({ ...stored, token: newToken, user: refreshedUser ?? stored?.user });
             }
             return newToken;
         } catch {
@@ -245,7 +252,14 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
                             const newToken = data?.access_token ?? data?.token ?? null;
                             if (newToken) {
                                 setAuthToken(newToken);
-                                await AppStorage.setSession({ ...storedSession, token: newToken });
+                                // Restore user + deviceId from refresh response
+                                const refreshedUser = data?.user;
+                                if (refreshedUser) {
+                                    setUser(refreshedUser);
+                                    const did = refreshedUser.deviceId ?? refreshedUser.device_id ?? null;
+                                    if (did) setDeviceId(did);
+                                }
+                                await AppStorage.setSession({ ...storedSession, token: newToken, user: refreshedUser ?? storedSession?.user });
                             }
                         }
                     } catch {
