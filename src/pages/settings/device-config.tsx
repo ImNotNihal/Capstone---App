@@ -1,19 +1,54 @@
-import {ScrollView, Text, TextInput, TouchableOpacity, View} from "react-native";
+import {ActivityIndicator, ScrollView, Text, TextInput, TouchableOpacity, View} from "react-native";
 import styles from "@/src/pages/settings/styles";
-import React, {useContext, useEffect, useState} from "react";
+import React, {useCallback, useContext, useEffect, useState} from "react";
 import {AppContext} from "@/src/context/app-context";
 import {Dialog} from "@/src/components/dialog";
 import {useBLE} from "@/src/context/ble-context";
+import {API_BASE_URL} from "@/src/config";
+import {useFocusEffect} from "@react-navigation/native";
 
 
 export default function DeviceConfig() {
-    const {deviceId} = useContext(AppContext);
+    const {deviceId, authToken} = useContext(AppContext);
     const [openBluetoothConnection, setOpenBluetoothConnection] = useState(false);
     const [selectedWifi, setSelectedWifi] = useState<string>("");
     const [wifiPassword, setWifiPassword] = useState("");
     const [openWifiConfig, setOpenWifiConfig] = useState(false);
     const [openBackendConfig, setOpenBackendConfig] = useState(false);
     const [backendEndpoint, setBackendEndpoint] = useState("");
+
+    // Real device info from server
+    const [deviceOnline, setDeviceOnline] = useState<boolean | null>(null);
+    const [lockStatus, setLockStatus] = useState<string | null>(null);
+    const [loadingStatus, setLoadingStatus] = useState(false);
+
+    const authHeaders = useCallback(() => {
+        const headers: Record<string, string> = {};
+        if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+        return headers;
+    }, [authToken]);
+
+    const fetchDeviceStatus = useCallback(() => {
+        if (!deviceId) return;
+        setLoadingStatus(true);
+        fetch(`${API_BASE_URL}status/${deviceId}`, { method: "GET", headers: authHeaders() })
+            .then((res) => res.json())
+            .then((data) => {
+                setDeviceOnline(data?.online ?? false);
+                setLockStatus(data?.status ?? null);
+            })
+            .catch(() => {
+                setDeviceOnline(false);
+                setLockStatus(null);
+            })
+            .finally(() => setLoadingStatus(false));
+    }, [deviceId, authHeaders]);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchDeviceStatus();
+        }, [fetchDeviceStatus])
+    );
     
     // const connectedDevice = {
     //     id: "smartlock_D0DB64A84320",
@@ -71,8 +106,18 @@ export default function DeviceConfig() {
             <View style={styles.card}>
                 <Text style={styles.rowTitle}>Device info</Text>
                 <Text style={styles.rowSubtitle}>Update network credentials for the lock.</Text>
-                <InfoRow label="Device ID" value={deviceId}/>
-                <InfoRow label="Wifi Status" value={"Online"}/>
+                {loadingStatus ? (
+                    <ActivityIndicator size="small" style={{marginVertical: 8}} />
+                ) : (
+                    <>
+                        <InfoRow label="Device ID" value={deviceId ?? "—"}/>
+                        <InfoRow label="Connection" value={deviceOnline === null ? "—" : deviceOnline ? "Online" : "Offline"}/>
+                        <InfoRow label="Lock Status" value={lockStatus ?? "—"}/>
+                    </>
+                )}
+                <TouchableOpacity onPress={fetchDeviceStatus} style={{marginTop: 8}}>
+                    <Text style={{color: "#2563eb", fontWeight: "600", fontSize: 13}}>Refresh</Text>
+                </TouchableOpacity>
             </View>
 
             {
