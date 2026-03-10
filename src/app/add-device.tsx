@@ -1,3 +1,3 @@
-import AddDevice from "../pages/add-device/add-device";
+import AddDeviceScreen from "../pages/settings/add-device";
 
-export default AddDevice;
+export default AddDeviceScreen;

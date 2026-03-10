@@ -3,6 +3,8 @@ import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
     ActivityIndicator,
+    FlatList,
+    Platform,
     SafeAreaView,
     ScrollView,
     StatusBar,
@@ -13,6 +15,7 @@ import {
     View,
 } from "react-native";
 import { useBLE } from "@/src/context/ble-context";
+import { useWifiScan } from "@/src/hooks/useWifiScan";
 import { API_BASE_URL } from "@/src/config";
 
 // Convert the HTTPS API base URL to a WSS URL for the ESP32 WebSocket connection
@@ -34,11 +37,14 @@ export default function AddDevice() {
         sendCommand,
     } = useBLE();
 
+    const { networks: wifiNetworks, scanning: wifiScanning, scan: scanWifi } = useWifiScan();
+
     const [step,         setStep]      = useState<Step>("scan");
     const [scanning,     setScanning]  = useState(false);
     const [ssid,         setSsid]      = useState("");
     const [wifiPassword, setWifiPassword] = useState("");
     const [sending,      setSending]   = useState(false);
+    const [manualEntry,  setManualEntry] = useState(false);
 
     // Start BLE scan on mount
     useEffect(() => {
@@ -66,6 +72,13 @@ export default function AddDevice() {
             setStep("wifi");
         }
     }, [connectedDevice, step]);
+
+    // Scan for WiFi networks when entering the WiFi step
+    useEffect(() => {
+        if (step === "wifi") {
+            scanWifi();
+        }
+    }, [step]);
 
     const namedDevices = allDevices.filter((d) => {
         const name = (d.name || "").trim() || (d.localName || "").trim();
@@ -196,46 +209,116 @@ export default function AddDevice() {
                         <View style={styles.formCard}>
                             <Text style={styles.formTitle}>Wi-Fi Configuration</Text>
                             <Text style={styles.formSubtitle}>
-                                The device will use these credentials to connect to your network.
+                                {ssid
+                                    ? `Selected: ${ssid}`
+                                    : "Select your Wi-Fi network from the list below."}
                             </Text>
 
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Network Name (SSID)</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={ssid}
-                                    onChangeText={setSsid}
-                                    placeholder="e.g. MyHomeWifi"
-                                    placeholderTextColor="#3F3F46"
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                />
-                            </View>
+                            {/* Network list (Android) or manual fallback (iOS/web) */}
+                            {!ssid && !manualEntry && (
+                                <>
+                                    {wifiScanning && (
+                                        <View style={styles.scanningRow}>
+                                            <ActivityIndicator size="small" color="#3B82F6" />
+                                            <Text style={styles.scanningText}>Scanning for networks…</Text>
+                                        </View>
+                                    )}
 
-                            <View style={styles.inputGroup}>
-                                <Text style={styles.inputLabel}>Password</Text>
-                                <TextInput
-                                    style={styles.input}
-                                    value={wifiPassword}
-                                    onChangeText={setWifiPassword}
-                                    placeholder="Wi-Fi password"
-                                    placeholderTextColor="#3F3F46"
-                                    secureTextEntry
-                                />
-                            </View>
+                                    {!wifiScanning && wifiNetworks.length === 0 && (
+                                        <Text style={[styles.formSubtitle, { marginTop: 4 }]}>
+                                            {Platform.OS === "android"
+                                                ? "No networks found. Tap Rescan or enter manually."
+                                                : "Wi-Fi scanning is not available on this platform. Please enter your network name manually."}
+                                        </Text>
+                                    )}
 
-                            <TouchableOpacity
-                                style={[styles.primaryBtn, (!ssid.trim() || sending) && styles.primaryBtnDisabled]}
-                                onPress={handleSendWifi}
-                                disabled={!ssid.trim() || sending}
-                                activeOpacity={0.8}
-                            >
-                                {sending ? (
-                                    <ActivityIndicator size="small" color="#050505" />
-                                ) : (
-                                    <Text style={styles.primaryBtnText}>Send to Device</Text>
-                                )}
-                            </TouchableOpacity>
+                                    {wifiNetworks.map((net) => (
+                                        <TouchableOpacity
+                                            key={net.SSID}
+                                            style={styles.networkCard}
+                                            activeOpacity={0.7}
+                                            onPress={() => setSsid(net.SSID)}
+                                        >
+                                            <View style={styles.networkLeft}>
+                                                <MaterialCommunityIcons name="wifi" size={20} color="#3B82F6" />
+                                                <Text style={styles.networkName}>{net.SSID}</Text>
+                                            </View>
+                                            {net.level != null && (
+                                                <Text style={styles.networkSignal}>
+                                                    {net.level > -50 ? "Strong" : net.level > -70 ? "Good" : "Weak"}
+                                                </Text>
+                                            )}
+                                        </TouchableOpacity>
+                                    ))}
+
+                                    <View style={styles.wifiActions}>
+                                        {Platform.OS === "android" && (
+                                            <TouchableOpacity onPress={scanWifi} style={styles.linkBtn}>
+                                                <MaterialCommunityIcons name="refresh" size={16} color="#3B82F6" />
+                                                <Text style={styles.linkBtnText}>Rescan</Text>
+                                            </TouchableOpacity>
+                                        )}
+                                        <TouchableOpacity onPress={() => setManualEntry(true)} style={styles.linkBtn}>
+                                            <MaterialCommunityIcons name="pencil" size={16} color="#3B82F6" />
+                                            <Text style={styles.linkBtnText}>Enter manually</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </>
+                            )}
+
+                            {/* Manual SSID entry fallback */}
+                            {!ssid && manualEntry && (
+                                <View style={styles.inputGroup}>
+                                    <Text style={styles.inputLabel}>Network Name (SSID)</Text>
+                                    <TextInput
+                                        style={styles.input}
+                                        onChangeText={(text) => { if (text.trim()) setSsid(text.trim()); }}
+                                        onSubmitEditing={(e) => { if (e.nativeEvent.text.trim()) setSsid(e.nativeEvent.text.trim()); }}
+                                        placeholder="e.g. MyHomeWifi"
+                                        placeholderTextColor="#3F3F46"
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                        returnKeyType="done"
+                                    />
+                                    <TouchableOpacity onPress={() => setManualEntry(false)} style={styles.linkBtn}>
+                                        <Text style={styles.linkBtnText}>Back to list</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
+
+                            {/* Password + send (shown after SSID is chosen) */}
+                            {!!ssid && (
+                                <>
+                                    <TouchableOpacity onPress={() => setSsid("")} style={styles.linkBtn}>
+                                        <Text style={styles.linkBtnText}>Change network</Text>
+                                    </TouchableOpacity>
+
+                                    <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Password</Text>
+                                        <TextInput
+                                            style={styles.input}
+                                            value={wifiPassword}
+                                            onChangeText={setWifiPassword}
+                                            placeholder="Wi-Fi password"
+                                            placeholderTextColor="#3F3F46"
+                                            secureTextEntry
+                                        />
+                                    </View>
+
+                                    <TouchableOpacity
+                                        style={[styles.primaryBtn, sending && styles.primaryBtnDisabled]}
+                                        onPress={handleSendWifi}
+                                        disabled={sending}
+                                        activeOpacity={0.8}
+                                    >
+                                        {sending ? (
+                                            <ActivityIndicator size="small" color="#050505" />
+                                        ) : (
+                                            <Text style={styles.primaryBtnText}>Send to Device</Text>
+                                        )}
+                                    </TouchableOpacity>
+                                </>
+                            )}
                         </View>
                     </>
                 )}
@@ -526,5 +609,45 @@ const styles = StyleSheet.create({
         fontSize: 14,
         textAlign: "center",
         lineHeight: 22,
+    },
+    networkCard: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        backgroundColor: "#09090B",
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#18181B",
+        padding: 14,
+    },
+    networkLeft: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+    },
+    networkName: {
+        color: "#FAFAFA",
+        fontSize: 15,
+        fontWeight: "600",
+    },
+    networkSignal: {
+        color: "#71717A",
+        fontSize: 12,
+    },
+    wifiActions: {
+        flexDirection: "row",
+        justifyContent: "center",
+        gap: 16,
+        marginTop: 4,
+    },
+    linkBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 4,
+    },
+    linkBtnText: {
+        color: "#3B82F6",
+        fontWeight: "600",
+        fontSize: 14,
     },
 });
