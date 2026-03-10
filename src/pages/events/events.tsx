@@ -98,7 +98,7 @@ export default function Events() {
     }, [user, fadeAnim, translateY]);
 
     const fetchEvents = useCallback(async () => {
-        if (!authToken || !deviceId) return;
+        if (!deviceId) return;
         setLoadingEvents(true);
         setEventsError(null);
         try {

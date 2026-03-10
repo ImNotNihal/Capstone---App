@@ -53,7 +53,7 @@ export default function ManageUsers() {
 
     // Fetch user role from device info
     const fetchRole = useCallback(async () => {
-        if (!authToken || !deviceId) {
+        if (!deviceId) {
             setLoadingRole(false);
             return;
         }
@@ -78,7 +78,7 @@ export default function ManageUsers() {
 
     // Fetch current credentials
     const fetchCredentials = useCallback(async () => {
-        if (!authToken) {
+        if (!deviceId) {
             setLoadingCreds(false);
             return;
         }

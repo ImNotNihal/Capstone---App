@@ -24,7 +24,7 @@ type OtpType = { id: string; label: string; code: string; expires: string };
 
 export default function PinSettings() {
     const router = useRouter();
-    const { authToken, deviceId } = useContext(AppContext);
+    const { deviceId } = useContext(AppContext);
 
     // UI States
     const [isAuthVisible, setIsAuthVisible] = useState(false);
@@ -50,34 +50,37 @@ export default function PinSettings() {
 
     // --- API FUNCTIONS ---
 
-    const authHeaders = useCallback(() => {
-        const h: Record<string, string> = { "Content-Type": "application/json" };
-        if (authToken) h["Authorization"] = `Bearer ${authToken}`;
-        return h;
-    }, [authToken]);
-
     const fetchPins = useCallback(async () => {
-        if (!authToken || !deviceId) return;
+        if (!deviceId) return;
         setLoading(true);
         try {
-            const res = await fetch(`${API_BASE_URL}devices/${deviceId}/pins`, {
-                headers: authHeaders(),
-            });
+            const res = await fetch(`${API_BASE_URL}pins/${deviceId}`);
             if (!res.ok) throw new Error();
             const data = await res.json();
-            setPins(data.map((p: any) => ({
-                id: p.id,
-                label: p.label,
-                code: p.code,
-                strength: p.strength || (p.code?.length >= 6 ? "Strong" : "Moderate"),
-                pinType: p.pinType || "permanent",
-            })));
+            const permanent: PinType[] = [];
+            const otp: OtpType[] = [];
+            for (const p of data) {
+                if (p.pinType === "otp") {
+                    otp.push({ id: p.id, label: p.label, code: p.code, expires: "24h" });
+                } else {
+                    permanent.push({
+                        id: p.id,
+                        label: p.label,
+                        code: p.code,
+                        strength: p.code?.length >= 6 ? "Strong" : "Moderate",
+                        pinType: "permanent",
+                    });
+                }
+            }
+            setPins(permanent);
+            setOtpCodes(otp);
         } catch {
             setPins([]);
+            setOtpCodes([]);
         } finally {
             setLoading(false);
         }
-    }, [authToken, deviceId, authHeaders]);
+    }, [deviceId]);
 
     useFocusEffect(
         useCallback(() => {
@@ -104,19 +107,21 @@ export default function PinSettings() {
         setIsAuthVisible(true);
     };
 
-    const handleGenerateOtp = () => {
-        console.log("--> Generate OTP button pressed!");
+    const handleGenerateOtp = async () => {
+        if (!deviceId) return;
         const newCode = Math.floor(1000 + Math.random() * 9000).toString();
-        const uniqueId = `otp_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-        
-        const newOtp = { 
-            id: uniqueId, 
-            label: "Temp Guest Code", 
-            code: newCode, 
-            expires: "24h" 
-        };
-
-        setOtpCodes(currentCodes => [newOtp, ...currentCodes]);
+        try {
+            const res = await fetch(`${API_BASE_URL}pins/${deviceId}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ label: "Temp Guest Code", code: newCode, pinType: "otp" }),
+            });
+            if (!res.ok) throw new Error();
+            const saved = await res.json();
+            setOtpCodes(prev => [{ id: saved.id, label: saved.label, code: saved.code, expires: "24h" }, ...prev]);
+        } catch {
+            Alert.alert("Error", "Failed to generate OTP.");
+        }
     };
 
     const triggerShake = () => {
@@ -151,9 +156,9 @@ export default function PinSettings() {
         
         setSaving(true);
         try {
-            const res = await fetch(`${API_BASE_URL}devices/${deviceId}/pins`, {
+            const res = await fetch(`${API_BASE_URL}pins/${deviceId}`, {
                 method: "POST",
-                headers: authHeaders(),
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ label: newPinLabel, code: newPinCode, pinType: "permanent" }),
             });
             if (!res.ok) throw new Error();
@@ -174,7 +179,7 @@ export default function PinSettings() {
         }
     };
 
-    const handleDeletePin = (id: string, label: string) => {
+    const handleDeletePin = (id: string, label: string, isOtp = false) => {
         Alert.alert("Delete PIN", `Delete the "${label}" code?`, [
             { text: "Cancel", style: "cancel" },
             {
@@ -183,11 +188,14 @@ export default function PinSettings() {
                 onPress: async () => {
                     setDeletingId(id);
                     try {
-                        await fetch(`${API_BASE_URL}devices/${deviceId}/pins/${id}`, {
+                        await fetch(`${API_BASE_URL}pins/${deviceId}/${id}`, {
                             method: "DELETE",
-                            headers: authHeaders(),
                         });
-                        setPins((prev) => prev.filter((p) => p.id !== id));
+                        if (isOtp) {
+                            setOtpCodes(prev => prev.filter(o => o.id !== id));
+                        } else {
+                            setPins(prev => prev.filter(p => p.id !== id));
+                        }
                     } catch {
                         Alert.alert("Error", "Failed to delete PIN.");
                     } finally {
@@ -246,8 +254,8 @@ export default function PinSettings() {
                                     </View>
                                 </View>
                             </View>
-                            <TouchableOpacity 
-                                onPress={() => setOtpCodes(current => current.filter(o => o.id !== otp.id))} 
+                            <TouchableOpacity
+                                onPress={() => handleDeletePin(otp.id, otp.label, true)}
                                 style={{ padding: 12 }}
                                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                             >

@@ -82,7 +82,7 @@ export default function BiometricSettings() {
     }, [authToken]);
 
     const fetchPrints = useCallback(async () => {
-        if (!authToken || !deviceId) return;
+        if (!deviceId) return;
         setLoading(true);
         try {
             const res = await fetch(`${API_BASE_URL}devices/${deviceId}/fingerprints`, {

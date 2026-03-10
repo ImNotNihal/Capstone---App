@@ -51,7 +51,7 @@ export default function FacialSettings() {
     }, [authToken]);
 
     const fetchProfiles = useCallback(async () => {
-        if (!authToken || !deviceId) return;
+        if (!deviceId) return;
         setLoading(true);
         try {
             const res = await fetch(`${API_BASE_URL}devices/${deviceId}/faces`, {

@@ -136,7 +136,7 @@ export default function Home() {
 
     // --- API Calls ---
     const fetchLastActivity = useCallback(async () => {
-        if (!deviceId || !authToken) return;
+        if (!deviceId) return;
         setLoadingEvent(true);
         try {
             const controller = new AbortController();
@@ -161,7 +161,7 @@ export default function Home() {
     }, [deviceId, authToken, authHeaders]);
 
     const fetchActiveMethods = useCallback(async () => {
-        if (!authToken) return;
+        if (!deviceId) return;
         setLoadingMethods(true);
         try {
             const controller = new AbortController();

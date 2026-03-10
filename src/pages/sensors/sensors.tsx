@@ -42,7 +42,7 @@ export default function Sensors() {
     }, [authToken]);
 
     const fetchSettings = useCallback(async () => {
-        if (!authToken || !deviceId) return;
+        if (!deviceId) return;
         try {
             const res = await fetch(`${API_BASE_URL}settings/${deviceId}`, {
                 headers: authHeaders(),

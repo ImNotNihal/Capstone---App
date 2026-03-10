@@ -38,7 +38,7 @@ export default function MotionSettings() {
     }, [authToken]);
 
     const fetchSettings = useCallback(async () => {
-        if (!authToken || !deviceId) return;
+        if (!deviceId) return;
         setLoading(true);
         try {
             const res = await fetch(`${API_BASE_URL}settings/${deviceId}`, {
@@ -67,8 +67,8 @@ export default function MotionSettings() {
     };
 
     const handleSave = async () => {
-        if (!deviceId || !authToken) {
-            Alert.alert("Not connected", "Please sign in and make sure a device is linked to your account.");
+        if (!deviceId) {
+            Alert.alert("Not connected", "Please make sure a device is linked to your account.");
             return;
         }
         setSaving(true);
